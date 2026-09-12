@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { addProduct, createState, publicState, queueActions, step, buyers } from './src/engine.js';
+import { addProduct, createState, publicState, queueActions, step, syncProducts, buyers } from './src/engine.js';
 
 const stateFile = new URL('./data/state.json', import.meta.url);
 const loadState = () => { try { return JSON.parse(readFileSync(stateFile, 'utf8')); } catch { return createState(); } };
@@ -51,6 +51,7 @@ createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/openai') { if (typeof body.apiKey !== 'string' || !body.apiKey.trim()) throw new Error('請輸入 API Key'); openaiApiKey = body.apiKey.trim(); return send(res, 200, {enabled:true, model}); }
     if (req.method === 'POST' && url.pathname === '/api/reset') { state = createState(body.seed); saveState(state); return send(res, 200, publicState(state)); }
     if (req.method === 'POST' && url.pathname === '/api/products') { const result = addProduct(state, body); saveState(state); return send(res, result.created ? 201 : 200, result); }
+    if (req.method === 'POST' && url.pathname === '/api/products/sync') { const result = syncProducts(state, body.products); saveState(state); return send(res, 200, {...result,state:publicState(state)}); }
     if (req.method === 'POST' && url.pathname === '/api/actions') { const actions = Array.isArray(body.actions) ? body.actions : [body]; const result = queueActions(state, actions); if (!result.rejected.length) saveState(state); return send(res, result.rejected.length ? 422 : 202, {...result, pendingActions:state.pendingActions.length}); }
     if (req.method === 'POST' && url.pathname === '/api/step') { const days = Math.min(365, Math.max(1, Number(body.days) || 1)); for (let day = 0; day < days; day++) state = step(state, openaiApiKey ? await getBuyerDecisions(state) : null); saveState(state); return send(res, 200, publicState(state)); }
     return send(res, 404, {error:'Not found'});

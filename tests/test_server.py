@@ -93,14 +93,12 @@ class FakeDailyDecisionResponses:
         assert observation["observation_date"] == "2026-09-11"
         proposal = server.DecisionProposal(
             price=observation["sales"]["price"] + 1,
-            ad_budget=observation["sales"]["ad_budget"] * 1.1,
             coupon_discount=0.02,
             reorder_quantity=120,
             promotion_level=0.25,
             confidence=84,
             summary="依昨日銷售資料調整今日價格與促銷。",
             price_reason="需求穩定，小幅調高售價。",
-            ad_reason="依昨日轉換表現增加投放。",
             inventory_reason="按昨日銷量補足安全庫存。",
             promotion_reason="採用低強度促銷測試需求。",
         )
@@ -123,9 +121,6 @@ class ServerTests(unittest.TestCase):
             "price_min": 50,
             "price_max": 150,
             "max_price_change_pct": 0.10,
-            "ad_budget_min": 0,
-            "ad_budget_max": 5000,
-            "max_ad_budget_change_pct": 0.25,
             "coupon_discount_max": 0.30,
             "reorder_quantity_max": 1000,
             "promotion_level_max": 1,
@@ -140,8 +135,6 @@ class ServerTests(unittest.TestCase):
                 "unit_cost": 70,
                 "units_sold": 80,
                 "revenue": 8000,
-                "ad_budget": 1000,
-                "ad_spend": 920,
                 "conversion_rate": 0.04,
             },
             "market": {"competitor_price": 98, "demand_index": 1.12},
@@ -209,14 +202,12 @@ class ServerTests(unittest.TestCase):
         request = self.make_request()
         unsafe = server.DecisionProposal(
             price=50,
-            ad_budget=9999,
             coupon_discount=0.8,
             reorder_quantity=5000,
             promotion_level=2,
             confidence=90,
             summary="以高折扣換取銷量。",
             price_reason="追上競品。",
-            ad_reason="擴大曝光。",
             inventory_reason="預先補貨。",
             promotion_reason="增加促銷。",
         )
@@ -224,7 +215,6 @@ class ServerTests(unittest.TestCase):
         self.assertGreaterEqual(margin["projected"], 0.30)
         self.assertEqual(action.price, 100)
         self.assertEqual(action.coupon_discount, 0)
-        self.assertEqual(action.ad_budget, 1250)
         self.assertEqual(action.reorder_quantity, 1000)
         self.assertEqual(action.promotion_level, 1)
         self.assertIn("gross_margin_price_floor", applied)
@@ -263,6 +253,12 @@ class ServerTests(unittest.TestCase):
     def test_product_creation_schema_has_no_manual_price_field(self):
         fields = set(server.ProductCreateRequest.model_fields)
         self.assertEqual(fields, {"name", "unit_cost", "inventory", "low_stock_threshold", "min_gross_margin"})
+
+    def test_advertising_is_removed_from_daily_decision_schema(self):
+        self.assertNotIn("ad_budget", server.Action.model_fields)
+        self.assertNotIn("ad_budget", server.DailySales.model_fields)
+        self.assertNotIn("ad_budget_max", server.DecisionConstraints.model_fields)
+        self.assertNotIn("advertising", server.Recommendation.model_fields["category"].annotation.__args__)
 
     def test_ai_prices_product_and_margin_floor_is_enforced(self):
         request = server.ProductCreateRequest(name="測試商品", unit_cost=70, inventory=50, low_stock_threshold=10, min_gross_margin=0.30)
@@ -305,10 +301,10 @@ class ServerTests(unittest.TestCase):
             "day": 1,
             "catalog": [{"id": "P001", "name": "測試衣服", "category": "服飾", "cost": 300, "minGrossMargin": 0.40}],
             "listings": [
-                {"id": "pilot-P001", "seller": "pilot", "productId": "P001", "price": 500, "inventory": 8, "adBudget": 100, "couponDiscount": 0, "promotionLevel": 0},
+                {"id": "pilot-P001", "seller": "pilot", "productId": "P001", "price": 500, "inventory": 8, "couponDiscount": 0, "promotionLevel": 0},
                 {"id": "npc-P001", "seller": "npc1", "productId": "P001", "price": 480, "inventory": 30},
             ],
-            "dailyResults": [{"day": 1, "listingId": "pilot-P001", "seller": "pilot", "productId": "P001", "price": 500, "unitCost": 300, "unitsSold": 3, "revenue": 1500, "grossProfit": 600, "inventory": 8, "adBudget": 100, "couponDiscount": 0, "promotionLevel": 0}],
+            "dailyResults": [{"day": 1, "listingId": "pilot-P001", "seller": "pilot", "productId": "P001", "price": 500, "unitCost": 300, "unitsSold": 3, "revenue": 1500, "grossProfit": 600, "inventory": 8, "couponDiscount": 0, "promotionLevel": 0}],
             "dailyHistory": [], "events": [{"name": "服飾熱門", "effect": 1.3, "duration": 2, "category": "服飾"}],
         }
 
@@ -332,12 +328,12 @@ class ServerTests(unittest.TestCase):
         synced_state = {**state, "catalog": [*state["catalog"], {"id": product["sku"], "name": product["name"]}]}
         with (
             patch.object(server, "load_products", return_value=[product]),
-            patch.object(server, "simulator_request", side_effect=[{"created": True}, synced_state]) as request,
+            patch.object(server, "simulator_request", return_value={"state": synced_state}) as request,
         ):
             result = server.sync_products_to_simulator(state)
         self.assertEqual(result, synced_state)
-        self.assertEqual(request.call_args_list[0].args[0:2], ("/api/products", "POST"))
-        payload = request.call_args_list[0].args[2]
+        self.assertEqual(request.call_args.args[0:2], ("/api/products/sync", "POST"))
+        payload = request.call_args.args[2]["products"][0]
         self.assertEqual(payload["id"], "AI-12AB34CD")
         self.assertEqual(payload["price"], 170)
         self.assertEqual(payload["inventory"], 8)
@@ -346,8 +342,8 @@ class ServerTests(unittest.TestCase):
     def test_simulator_applies_strategy_but_keeps_restock_as_seller_notification(self):
         state = self.simulator_state()
         decision = {
-            "sku": "P001", "action": {"price": 490, "ad_budget": 200, "coupon_discount": 0.05, "reorder_quantity": 40, "promotion_level": 0.2},
-            "decision": {"summary": "降低價格並增加曝光", "confidence": 80, "reasons": {"price": "接近競品", "advertising": "增加流量", "inventory": "低於安全庫存", "promotion": "提升轉換"}},
+            "sku": "P001", "action": {"price": 490, "coupon_discount": 0.05, "reorder_quantity": 40, "promotion_level": 0.2},
+            "decision": {"summary": "降低價格並增加促銷", "confidence": 80, "reasons": {"price": "接近競品", "inventory": "低於安全庫存", "promotion": "提升轉換"}},
             "meta": {"source": "ai", "model": "gpt-4o-mini"}, "guardrails": {"applied": [], "margin": {}},
         }
         next_state = {**state, "day": 2}

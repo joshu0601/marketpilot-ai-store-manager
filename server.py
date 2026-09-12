@@ -37,7 +37,7 @@ TAIPEI_TIMEZONE = ZoneInfo("Asia/Taipei")
 
 
 class Recommendation(BaseModel):
-    category: Literal["advertising", "inventory", "pricing", "promotion", "customer"]
+    category: Literal["inventory", "pricing", "promotion", "customer"]
     title: str = Field(min_length=2, max_length=40)
     description: str = Field(min_length=8, max_length=160)
     current_value: str = Field(min_length=1, max_length=40)
@@ -63,8 +63,6 @@ class DailySales(BaseModel):
     traffic: int = Field(default=0, ge=0)
     conversion_rate: float = Field(default=0, ge=0, le=1)
     lost_sales: int = Field(default=0, ge=0)
-    ad_budget: float = Field(default=0, ge=0)
-    ad_spend: float = Field(default=0, ge=0)
     coupon_discount: float = Field(default=0, ge=0, le=1)
     promotion_level: float = Field(default=0, ge=0, le=1)
 
@@ -89,7 +87,6 @@ class MarketEvent(BaseModel):
 
 class Action(BaseModel):
     price: float = Field(gt=0)
-    ad_budget: float = Field(ge=0)
     coupon_discount: float = Field(ge=0, le=1)
     reorder_quantity: int = Field(ge=0)
     promotion_level: float = Field(ge=0, le=1)
@@ -100,9 +97,6 @@ class DecisionConstraints(BaseModel):
     price_min: float = Field(default=50, gt=0)
     price_max: float = Field(default=5000, gt=0)
     max_price_change_pct: float = Field(default=0.10, ge=0, le=1)
-    ad_budget_min: float = Field(default=0, ge=0)
-    ad_budget_max: float = Field(default=5000, ge=0)
-    max_ad_budget_change_pct: float = Field(default=0.25, ge=0, le=2)
     coupon_discount_max: float = Field(default=0.30, ge=0, le=1)
     reorder_quantity_max: int = Field(default=1000, ge=0)
     promotion_level_max: float = Field(default=1, ge=0, le=1)
@@ -131,14 +125,12 @@ class BatchDecisionRequest(BaseModel):
 
 class DecisionProposal(BaseModel):
     price: float
-    ad_budget: float
     coupon_discount: float
     reorder_quantity: int
     promotion_level: float
     confidence: int = Field(ge=0, le=100)
     summary: str = Field(min_length=5, max_length=160)
     price_reason: str = Field(min_length=2, max_length=160)
-    ad_reason: str = Field(min_length=2, max_length=160)
     inventory_reason: str = Field(min_length=2, max_length=160)
     promotion_reason: str = Field(min_length=2, max_length=160)
 
@@ -187,13 +179,10 @@ DEFAULT_STORE_CONTEXT = {
         "competitor_avg_price": 3120,
         "competitor_price_change": -0.012,
         "demand_index": 1.18,
-        "ad_roas": 4.7,
-        "current_daily_ad_budget": 1000,
         "safe_inventory_days": 11.4,
     },
     "constraints": {
         "price_range": [50, 5000],
-        "daily_ad_budget_range": [0, 5000],
         "promotion_discount_max": 0.30,
         "human_confirmation_required": False,
         "inventory_reorder_mode": "notify_seller",
@@ -207,7 +196,7 @@ SYSTEM_PROMPT = """你是 MarketPilot 的資深電商營運店長。請分析使
 1. 只根據提供的資料判斷，不要杜撰訂單、成本或市場消息。
 2. 優先處理預期效益高、風險可控的事項，並遵守 constraints。
 3. 建議要具體寫出目前值、建議值與預期影響；無法可靠估算時請明確寫「需進一步驗證」。
-4. 商品售價、廣告與促銷策略會在安全限制內自動執行，不要要求人工確認。
+4. 商品售價與促銷策略會在安全限制內自動執行，不要要求人工確認。
 5. 庫存不足時只通知賣家確認補貨，不要宣稱系統已自動採購。
 6. 使用自然、精簡的繁體中文，像有經驗的營運主管，不使用浮誇或機器人語氣。
 """
@@ -218,7 +207,7 @@ DECISION_PROMPT = """你是 MarketPilot 的電商決策引擎。輸入是某 SKU
 決策目標依序為：
 1. 遵守 constraints，尤其是 target_gross_margin。毛利以折價後有效售價計算：(price × (1-coupon_discount) - unit_cost) / (price × (1-coupon_discount))。
 2. 避免缺貨並考慮在途庫存與 lead_time_days。
-3. 根據競品價格、需求指數、轉換率、lost_sales 與 events 調整價格、廣告、折扣及促銷。
+3. 根據競品價格、需求指數、轉換率、lost_sales 與 events 調整價格、折扣及促銷。
 4. 不因單日雜訊做劇烈調整；history_7d 為空時應更保守。
 5. 回傳每個欄位都必須是具體數值。reorder_quantity 是整數，coupon_discount 與 promotion_level 使用 0 到 1。
 
@@ -374,10 +363,14 @@ def save_daily_analysis(payload: dict) -> None:
 
 
 def attach_execution_records(payload: dict) -> dict:
+    analysis = payload.get("analysis", {})
+    if isinstance(analysis, dict) and isinstance(analysis.get("recommendations"), list):
+        analysis["recommendations"] = [item for item in analysis["recommendations"] if item.get("category") != "advertising"]
     if isinstance(payload.get("execution_records"), list):
+        payload["execution_records"] = [item for item in payload["execution_records"] if item.get("category") != "advertising"]
         return payload
     executed_at = payload.get("meta", {}).get("generated_at") or datetime.now(TAIPEI_TIMEZONE).isoformat()
-    recommendations = payload.get("analysis", {}).get("recommendations", [])
+    recommendations = analysis.get("recommendations", [])
     payload["execution_records"] = [
         {
             "id": f"daily-{analysis_date()}-{index + 1}",
@@ -439,7 +432,6 @@ def market_snapshot(context: dict) -> dict:
         "demand_index": market.get("demand_index"),
         "conversion_rate": sales.get("conversion_rate", period.get("conversion_rate")),
         "inventory_on_hand": inventory.get("on_hand"),
-        "ad_roas": market.get("ad_roas"),
         "event_count": len(events) if isinstance(events, list) else 0,
         "events": [
             {"type": event.get("type"), "severity": event.get("severity")}
@@ -465,14 +457,12 @@ def fallback_proposal(request: AgentDecisionRequest, error: str | None = None) -
     reorder = max(0, min(constraints.reorder_quantity_max, stock_target - available))
     return DecisionProposal(
         price=request.last_action.price if request.last_action else sales.price,
-        ad_budget=request.last_action.ad_budget if request.last_action else sales.ad_budget,
         coupon_discount=0,
         reorder_quantity=reorder,
         promotion_level=0,
         confidence=35 if error else 50,
         summary="沿用穩健設定並依安全庫存補貨。" if not error else "模型暫時無法使用，已套用安全回退策略。",
         price_reason="維持目前售價並交由毛利防護檢查。",
-        ad_reason="沿用前次廣告預算，避免因資料不足劇烈調整。",
         inventory_reason=f"依日均銷量與 {constraints.target_stock_days} 天目標庫存計算。",
         promotion_reason="暫不增加折扣或促銷。",
     )
@@ -484,9 +474,6 @@ def apply_guardrails(proposal: DecisionProposal, request: AgentDecisionRequest) 
     sales = request.sales
     if c.price_min > c.price_max:
         raise ValueError("constraints.price_min 不得大於 price_max")
-    if c.ad_budget_min > c.ad_budget_max:
-        raise ValueError("constraints.ad_budget_min 不得大於 ad_budget_max")
-
     minimum_effective_price = sales.unit_cost / (1 - c.target_gross_margin)
     if minimum_effective_price > c.price_max + 1e-9:
         raise ValueError("price_max 無法滿足 target_gross_margin，請調高價格上限或降低目標毛利率")
@@ -498,16 +485,6 @@ def apply_guardrails(proposal: DecisionProposal, request: AgentDecisionRequest) 
     price = _clamp(float(proposal.price), daily_low, daily_high)
     if abs(price - float(proposal.price)) > 1e-9:
         applied.append("price_change_limit")
-
-    current_ad = sales.ad_budget
-    if current_ad > 0:
-        ad_low = max(c.ad_budget_min, current_ad * (1 - c.max_ad_budget_change_pct))
-        ad_high = min(c.ad_budget_max, current_ad * (1 + c.max_ad_budget_change_pct))
-    else:
-        ad_low, ad_high = c.ad_budget_min, c.ad_budget_max
-    ad_budget = _clamp(float(proposal.ad_budget), ad_low, ad_high)
-    if abs(ad_budget - float(proposal.ad_budget)) > 1e-9:
-        applied.append("ad_budget_change_limit")
 
     coupon = _clamp(float(proposal.coupon_discount), 0, c.coupon_discount_max)
     if abs(coupon - float(proposal.coupon_discount)) > 1e-9:
@@ -531,7 +508,6 @@ def apply_guardrails(proposal: DecisionProposal, request: AgentDecisionRequest) 
             applied.append("gross_margin_price_floor")
 
     price = round(price, 2)
-    ad_budget = round(ad_budget, 2)
     coupon = round(coupon, 4)
     promotion = round(promotion, 4)
     effective_price = price * (1 - coupon)
@@ -547,7 +523,6 @@ def apply_guardrails(proposal: DecisionProposal, request: AgentDecisionRequest) 
 
     action = Action(
         price=price,
-        ad_budget=ad_budget,
         coupon_discount=coupon,
         reorder_quantity=reorder,
         promotion_level=promotion,
@@ -608,7 +583,6 @@ def decide_action(request: AgentDecisionRequest, require_ai: bool = False) -> di
             "confidence": proposal.confidence,
             "reasons": {
                 "price": proposal.price_reason,
-                "advertising": proposal.ad_reason,
                 "inventory": proposal.inventory_reason,
                 "promotion": proposal.promotion_reason,
             },
@@ -823,15 +797,25 @@ def sync_product_to_simulator(product: dict) -> dict:
 
 
 def sync_products_to_simulator(state: dict | None = None) -> dict:
+    products = [simulator_product_payload(product) for product in load_products() if product.get("sku")]
     state = state or simulator_request("/api/state")
-    simulator_catalog = simulator_catalog_map(state)
-    synced = False
-    for product in load_products():
-        simulator_product = simulator_catalog.get(product.get("sku"))
-        if product.get("sku") and (simulator_product is None or "minGrossMargin" not in simulator_product):
-            sync_product_to_simulator(product)
-            synced = True
-    return simulator_request("/api/state") if synced else state
+    current = simulator_catalog_map(state)
+    expected_ids = {product["id"] for product in products}
+    needs_sync = set(current) != expected_ids or any("adBudget" in listing for listing in state.get("listings", []))
+    if not needs_sync:
+        needs_sync = any(
+            current[product["id"]].get("name") != product["name"]
+            or float(current[product["id"]].get("cost", 0)) != float(product["cost"])
+            or float(current[product["id"]].get("minGrossMargin", 0)) != float(product["minGrossMargin"])
+            for product in products
+        )
+    if not needs_sync:
+        return state
+    result = simulator_request("/api/products/sync", "POST", {"products": products})
+    synced_state = result.get("state")
+    if not isinstance(synced_state, dict):
+        raise RuntimeError("市場模擬器沒有回傳同步後狀態")
+    return synced_state
 
 
 def save_simulator_run(payload: dict) -> None:
@@ -919,7 +903,6 @@ def simulator_daily_sales(result: dict) -> DailySales:
         traffic=traffic,
         conversion_rate=min(1, units / traffic),
         lost_sales=1 if int(result.get("inventory", 0)) == 0 else 0,
-        ad_budget=max(0, float(result.get("adBudget", 0))),
         coupon_discount=max(0, min(1, float(result.get("couponDiscount", 0)))),
         promotion_level=max(0, min(1, float(result.get("promotionLevel", 0)))),
     )
@@ -963,8 +946,8 @@ def simulator_batch(state: dict) -> BatchDecisionRequest:
             inventory=InventorySnapshot(on_hand=max(0, int(listing.get("inventory", 0))), in_transit=0, lead_time_days=3),
             events=[MarketEvent(type=str(event.get("name", "市場事件")), severity=min(1, abs(float(event.get("effect", 1)) - 1) / 0.5), description=f"影響係數 {event.get('effect', 1)}") for event in active_events],
             history_7d=history[-7:],
-            last_action=Action(price=current_price, ad_budget=float(listing.get("adBudget", 0)), coupon_discount=float(listing.get("couponDiscount", 0)), reorder_quantity=0, promotion_level=float(listing.get("promotionLevel", 0))),
-            constraints=DecisionConstraints(target_gross_margin=target_margin, price_min=math.ceil((cost / (1 - target_margin)) * 100) / 100, price_max=cost * 5, max_price_change_pct=.15, ad_budget_min=0, ad_budget_max=5000, max_ad_budget_change_pct=.30, coupon_discount_max=.30, reorder_quantity_max=500, promotion_level_max=1, safety_stock_days=5, target_stock_days=12),
+            last_action=Action(price=current_price, coupon_discount=float(listing.get("couponDiscount", 0)), reorder_quantity=0, promotion_level=float(listing.get("promotionLevel", 0))),
+            constraints=DecisionConstraints(target_gross_margin=target_margin, price_min=math.ceil((cost / (1 - target_margin)) * 100) / 100, price_max=cost * 5, max_price_change_pct=.15, coupon_discount_max=.30, reorder_quantity_max=500, promotion_level_max=1, safety_stock_days=5, target_stock_days=12),
         ))
     return BatchDecisionRequest(batch_id=f"market-simulator-day-{state.get('day')}", observation_date=observation_date, observations=observations)
 
@@ -982,7 +965,7 @@ def run_simulator_day() -> dict:
         action = decision["action"]
         actions.extend([
             {"type": "update_price", "productId": product_id, "price": action["price"]},
-            {"type": "update_strategy", "productId": product_id, "ad_budget": action["ad_budget"], "coupon_discount": action["coupon_discount"], "promotion_level": action["promotion_level"]},
+            {"type": "update_strategy", "productId": product_id, "coupon_discount": action["coupon_discount"], "promotion_level": action["promotion_level"]},
         ])
         if action["reorder_quantity"] > 0:
             notifications.append({"product_id": product_id, "name": catalog.get(product_id, {}).get("name", product_id), "quantity": action["reorder_quantity"], "reason": decision["decision"]["reasons"]["inventory"], "status": "waiting_for_seller"})
@@ -1019,7 +1002,8 @@ class MarketPilotHandler(SimpleHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
-        allowed_origin = os.getenv("MARKETPILOT_CORS_ORIGIN")
+        request_origin = self.headers.get("Origin", "")
+        allowed_origin = os.getenv("MARKETPILOT_CORS_ORIGIN") or (request_origin if request_origin in {"http://127.0.0.1:5173", "http://localhost:5173"} else None)
         if allowed_origin:
             self.send_header("Access-Control-Allow-Origin", allowed_origin)
         self.end_headers()
@@ -1079,7 +1063,8 @@ class MarketPilotHandler(SimpleHTTPRequestHandler):
         self.send_response(HTTPStatus.NO_CONTENT)
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
-        allowed_origin = os.getenv("MARKETPILOT_CORS_ORIGIN")
+        request_origin = self.headers.get("Origin", "")
+        allowed_origin = os.getenv("MARKETPILOT_CORS_ORIGIN") or (request_origin if request_origin in {"http://127.0.0.1:5173", "http://localhost:5173"} else None)
         if allowed_origin:
             self.send_header("Access-Control-Allow-Origin", allowed_origin)
         self.end_headers()

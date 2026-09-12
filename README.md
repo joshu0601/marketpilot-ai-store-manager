@@ -47,7 +47,7 @@ OPENAI_MODEL=gpt-4o-mini
 
 目前商店訂單與營運指標為展示資料；GPT 會根據這些資料即時產生分析，API key 不會暴露在前端程式碼或 API 回應中。
 
-AI 店長頁不包含預先填寫的 GPT 結論。每天第一次進入時會呼叫真實模型，結果保存於 `data/daily_analysis.json`；同一個台北日再次進入只會讀取今日快照，不會重複呼叫 GPT。定價、廣告與促銷建議會自動產生已套用紀錄，庫存類建議則產生賣家補貨通知。若設定了 `MARKETPILOT_ENVIRONMENT_URL`，會先取得外部環境最新 Observation，再交給 GPT 分析並在畫面標示資料來源。
+AI 店長頁不包含預先填寫的 GPT 結論。每天第一次進入時會呼叫真實模型，結果保存於 `data/daily_analysis.json`；同一個台北日再次進入只會讀取今日快照，不會重複呼叫 GPT。定價與促銷建議會自動產生已套用紀錄，庫存類建議則產生賣家補貨通知。若設定了 `MARKETPILOT_ENVIRONMENT_URL`，會先取得外部環境最新 Observation，再交給 GPT 分析並在畫面標示資料來源。
 
 新增商品時不提供售價欄位。`POST /api/products` 會由 GPT 決定初始售價，並由最低毛利防護再次驗證；建立完成後會立即同步至 MarketSimulator 消費者商城。既有商品也會在開啟模擬後台或推進新一天時自動補同步。目前庫存小於或等於預警庫存時會標記低庫存並提供給每日 AI 分析。詳細格式見 [AI 商品建立 API](docs/PRODUCTS_API.md)。
 
@@ -59,9 +59,9 @@ AI 店長頁不包含預先填寫的 GPT 結論。每天第一次進入時會呼
 POST http://127.0.0.1:8000/api/agent/decide
 ```
 
-MarketPilot 會回傳下一天使用的 `price`、`ad_budget`、`coupon_discount`、`reorder_quantity` 與 `promotion_level`。GPT 建議會再經過確定性的目標毛利、價格變動、廣告預算、折扣、補貨與促銷範圍檢查。
+MarketPilot 會回傳下一天使用的 `price`、`coupon_discount`、`reorder_quantity` 與 `promotion_level`。GPT 建議會再經過確定性的目標毛利、價格變動、折扣、補貨與促銷範圍檢查。
 
-多商品環境請使用 `POST /api/agent/decide-all`，每天一次提交所有 SKU 的前一日 Observation。批次模式要求所有商品決策都來自 GPT，並分別決定售價、折價券、促銷強度、廣告預算與補貨量。
+多商品環境請使用 `POST /api/agent/decide-all`，每天一次提交所有 SKU 的前一日 Observation。批次模式要求所有商品決策都來自 GPT，並分別決定售價、折價券、促銷強度與補貨量。
 
 完整說明見 [外部環境決策 API](docs/EXTERNAL_API.md)，可直接執行：
 

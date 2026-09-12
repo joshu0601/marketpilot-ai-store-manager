@@ -48,21 +48,18 @@ const salesData = {
 };
 
 const orders = [
-  ['#MP-10482','陳怡安','yi.an@email.com','無線降噪耳機 × 1','2,990','已付款','green'],
-  ['#MP-10481','王柏凱','kai.w@email.com','日光隨行保溫杯 × 2','1,760','待出貨','orange'],
-  ['#MP-10480','林書妤','shuyu@email.com','簡約帆布托特包 × 1','1,280','配送中','blue'],
-  ['#MP-10479','張家豪','hao.z@email.com','無線降噪耳機 × 1','2,840','已完成','gray'],
-  ['#MP-10478','許雅婷','yating@email.com','植萃洗沐組 × 3','2,370','已完成','gray'],
-  ['#MP-10477','黃冠宇','kuan@email.com','日光隨行保溫杯 × 1','880','待付款','orange']
+  ['#MP-10482','陳怡安','yi.an@email.com','手錶 × 1','799','已付款','green'],
+  ['#MP-10481','王柏凱','kai.w@email.com','衣服2 × 1','799','待出貨','orange'],
+  ['#MP-10480','林書妤','shuyu@email.com','衣服 × 2','298','配送中','blue'],
+  ['#MP-10479','張家豪','hao.z@email.com','手錶 × 1','799','已完成','gray'],
+  ['#MP-10478','許雅婷','yating@email.com','衣服2 × 1','799','已完成','gray'],
+  ['#MP-10477','黃冠宇','kuan@email.com','衣服 × 1','149','待付款','orange']
 ];
 
 const products = [
-  ['🎧','無線降噪耳機','SKU-001','3,280','218','熱銷中','green'],
-  ['🥤','日光隨行保溫杯','SKU-014','880','14','庫存偏低','orange'],
-  ['👜','簡約帆布托特包','SKU-023','1,280','86','販售中','green'],
-  ['🧴','植萃洗沐組','SKU-031','790','8','需補貨','orange'],
-  ['🕯️','山林香氛蠟燭','SKU-042','1,080','124','販售中','green'],
-  ['📓','再生紙手帳','SKU-053','520','0','已售罄','gray']
+  ['📦','衣服','AI-163C99BC','149','50','販售中','green'],
+  ['📦','衣服2','AI-6C86F661','799','100','販售中','green'],
+  ['📦','手錶','AI-3FD44584','799','50','販售中','green']
 ];
 
 function lineChart(data = salesData.month, color = 'var(--green)') {
@@ -107,14 +104,14 @@ function overviewPage() {
     <article class="card side-card briefing">
       <div class="card-head"><div><h2>今日營運提醒</h2><p>依目前儀表板資料整理</p></div><span class="status-pill"><i></i>待 GPT 分析</span></div>
       <div class="brief-list">
-        <div class="brief-item"><span class="brief-index">01</span><div><strong>耳機需求正在升溫</strong><p>近 7 日搜尋量上升 23%，建議廣告預算提高 15%。</p></div></div>
+        <div class="brief-item"><span class="brief-index">01</span><div><strong>耳機需求正在升溫</strong><p>近 7 日搜尋量上升 23%，建議安排限時折扣活動。</p></div></div>
         <div class="brief-item"><span class="brief-index">02</span><div><strong>兩項商品需要補貨</strong><p>保溫杯與洗沐組預估將在 6 天內售罄。</p></div></div>
         <div class="brief-item"><span class="brief-index">03</span><div><strong>週末活動有成長機會</strong><p>滿額免運預估可帶來 NT$ 18,400 額外營收。</p></div></div>
       </div><div class="brief-actions"><button class="primary-button" data-go="manager">開啟 GPT 分析</button><button class="ghost-button dismiss-brief">稍後處理</button></div>
     </article>
     <article class="card orders-card"><div class="card-head"><div><h2>最新訂單</h2><p>今日已有 12 筆新訂單</p></div><button class="text-link" data-go="orders">查看全部 ${icon('arrow')}</button></div>${orderTable(orders.slice(0,5))}</article>
     <article class="card stock-card"><div class="card-head"><div><h2>庫存提醒</h2><p>依目前銷售速度預估</p></div><button class="text-link" data-go="products">管理庫存</button></div><div class="stock-list">
-      ${[['🥤','日光隨行保溫杯','SKU-014',14,'約 5 天售罄'],['🧴','植萃洗沐組','SKU-031',8,'約 4 天售罄'],['📓','再生紙手帳','SKU-053',0,'已售罄']].map(x=>`<div class="stock-row"><div class="product-thumb">${x[0]}</div><div><strong>${x[1]}</strong><small>${x[2]}</small></div><div class="stock-count"><b>${x[3]} 件</b><span>${x[4]}</span></div></div>`).join('')}
+      ${[['📦','手錶','AI-3FD44584',50,'預警庫存 10 件'],['📦','衣服','AI-163C99BC',50,'庫存充足'],['📦','衣服2','AI-6C86F661',100,'庫存充足']].map(x=>`<div class="stock-row"><div class="product-thumb">${x[0]}</div><div><strong>${x[1]}</strong><small>${x[2]}</small></div><div class="stock-count"><b>${x[3]} 件</b><span>${x[4]}</span></div></div>`).join('')}
     </div></article>
   </section>`;
 }
@@ -136,16 +133,6 @@ function recommendation(iconName,title,to,result,status,index) {
   return `<article class="card recommendation"><div class="rec-top"><span class="rec-icon">${icon(iconName)}</span><span class="rec-impact">執行紀錄</span></div><h3>${title}</h3><p>${status==='seller_notified'?'補貨通知內容':'AI 店長套用內容'}</p><div class="rec-change"><span>${to}</span></div><div class="execution-status ${status==='seller_notified'?'notified':''}"><span>${status==='seller_notified'?icon('bell'):icon('check')}</span><strong>${escapeHTML(result)}</strong></div><button class="ghost-button reason-button" data-reason-index="${index}">${icon('eye')} 查看 AI 判斷原因</button></article>`;
 }
 
-function simulationPage() {
-  return `${pageHead('MARKET SIMULATION','市場模擬','以真實 GPT 賣家對抗動態競品與 AI 買家，逐日驗證營運策略。',`<button class="ghost-button simulator-marketplace">${icon('eye')} 開啟模擬商城</button><button class="primary-button simulator-run">${icon('play')} 推進下一天</button>`)}
-  <article class="card simulation-status"><div><span class="manager-label"><i></i><b id="simConnection">正在連線模擬器</b></span><h2 id="simHeadline">讀取市場狀態中</h2><p id="simDescription">完整環境會同步市場事件、競品、AI 買家與 MarketPilot 店長決策。</p></div><div class="sim-day"><small>模擬日</small><strong id="simDay">—</strong><button class="ghost-button simulator-reset">重置市場</button></div></article>
-  <section class="stat-strip" id="simMetrics">${['累積營收','累積利潤','銷售件數','市場佔有率'].map(label=>`<article class="card stat-box"><small>${label}</small><strong>—</strong><div class="delta">等待模擬資料</div></article>`).join('')}</section>
-  <section class="split-grid simulation-grid"><article class="card large-card"><div class="card-head"><div><h2>MarketPilot 商品</h2><p>AI 每天依昨日市場結果自動調整</p></div><span class="pill gray" id="simProductCount">0 項</span></div><div class="sim-products" id="simProducts"><div class="empty-inline">尚未啟動市場</div></div></article><article class="card large-card"><div class="card-head"><div><h2>市場事件與競爭</h2><p>直接影響下一日需求</p></div></div><div id="simEvents"><div class="empty-inline">等待市場事件</div></div><div class="sim-log" id="simLogs"></div></article></section>
-  <div class="card-head"><div><h2>最新 AI 店長決策</h2><p>每個商品的價格、廣告、促銷與補貨判斷</p></div><span class="pill" id="simDecisionStatus">等待執行</span></div>
-  <section class="recommendation-grid" id="simDecisions"><article class="card empty-state ai-empty"><span class="metric-icon">${icon('spark')}</span><h3>尚無模擬決策</h3><p>第一次推進會由 GPT 自動上架所有商品。</p></article></section>
-  <article class="card large-card sim-notifications"><div class="card-head"><div><h2>賣家補貨通知</h2><p>AI 建議補貨時由賣家確認數量</p></div><span class="pill orange" id="simNotificationCount">0 則</span></div><div id="simNotifications"><div class="empty-inline">目前沒有待確認補貨</div></div></article>`;
-}
-
 function openExecutionReason(item, execution) {
   openModal(`<h2>AI 判斷原因</h2><p>${escapeHTML(item.title)}</p><div class="reason-summary"><span class="pill ${execution?.status==='seller_notified'?'orange':''}">${escapeHTML(execution?.result || '已自動套用')}</span><strong>信心分數 ${Number(item.confidence || 0)}%</strong></div><div class="reason-block"><small>判斷依據</small><p>${escapeHTML(item.rationale || item.description)}</p></div><div class="reason-block"><small>執行內容</small><div class="rec-change"><b>${escapeHTML(item.current_value)}</b>${icon('arrow')}<span>${escapeHTML(item.suggested_value)}</span></div></div><div class="reason-block"><small>預期影響</small><p>${escapeHTML(item.expected_impact)}</p></div><div class="modal-footer"><button class="primary-button modal-cancel">關閉</button></div>`);
   modalContent.querySelector('.modal-cancel').onclick=closeModal;
@@ -154,21 +141,21 @@ function openExecutionReason(item, execution) {
 function listPage(type) {
   const configs = {
     orders: ['訂單管理','追蹤付款、出貨與退貨狀態。',['今日訂單','待出貨','配送中','退貨申請'],['12','8','19','2']],
-    products: ['商品與庫存','管理商品資料、AI 自動售價與即時庫存。',['販售中商品','低庫存','已售罄','庫存總值'],['42','2','1','NT$ 486K']],
+    products: ['商品與庫存','管理商品資料、AI 自動售價與即時庫存。',['販售中商品','低庫存','已售罄','庫存總值'],['3','0','0','NT$ 80K']],
     customers: ['顧客','了解顧客輪廓與長期價值。',['總顧客數','本月新客','回購顧客','平均終身價值'],['8,426','384','2,308','NT$ 4,820']],
-    marketing: ['行銷活動','規劃活動並追蹤每一筆行銷投入。',['進行中活動','本月廣告支出','平均 ROAS','帶來營收'],['4','NT$ 48.6K','4.7x','NT$ 228K']]
+    marketing: ['促銷活動','規劃折扣、免運與會員回購活動。',['進行中活動','折價券使用','平均轉換率','帶來營收'],['3','186 張','5.2%','NT$ 142K']]
   };
   const c=configs[type];
   let body='';
   if(type==='orders') body=orderTable(orders);
-  else if(type==='products') body=`<table><thead><tr><th>商品</th><th>SKU</th><th>AI 售價</th><th>可售庫存</th><th>狀態</th><th></th></tr></thead><tbody id="productRows">${products.map(p=>`<tr><td><div class="customer-cell"><span class="product-thumb">${p[0]}</span><strong>${p[1]}</strong></div></td><td>${p[2]}</td><td><strong>NT$ ${p[3]}</strong><small class="ai-price-label">AI 自動定價</small></td><td>${p[4]} 件</td><td><span class="pill ${p[6]}">${p[5]}</span></td><td><button class="icon-button bare">•••</button></td></tr>`).join('')}</tbody></table>`;
+  else if(type==='products') body=`<table><thead><tr><th>商品</th><th>SKU</th><th>AI 售價</th><th>可售庫存</th><th>狀態</th><th></th></tr></thead><tbody id="productRows"></tbody></table>`;
   else if(type==='customers') body=`<table><thead><tr><th>顧客</th><th>訂單數</th><th>累積消費</th><th>最近購買</th><th>分群</th></tr></thead><tbody>${[['陳怡安','12','35,680','今天','高價值顧客'],['王柏凱','5','12,460','今天','活躍顧客'],['林書妤','8','21,840','今天','回購顧客'],['張家豪','2','5,830','昨天','新顧客'],['許雅婷','16','48,210','昨天','高價值顧客'],['黃冠宇','1','880','09/10','新顧客']].map((x,i)=>`<tr><td><div class="customer-cell"><span class="mini-avatar">${x[0].slice(-2)}</span><div><strong>${x[0]}</strong><small>member${1048+i}@email.com</small></div></div></td><td>${x[1]}</td><td>NT$ ${x[2]}</td><td>${x[3]}</td><td><span class="pill ${i%3===0?'':'gray'}">${x[4]}</span></td></tr>`).join('')}</tbody></table>`;
-  else body=`<table><thead><tr><th>活動名稱</th><th>類型</th><th>期間</th><th>支出</th><th>帶來營收</th><th>狀態</th></tr></thead><tbody>${[['週末滿額免運','站內活動','09/13 – 09/15','0','—','草稿'],['耳機搜尋廣告','搜尋廣告','持續進行','18,420','86,580','進行中'],['九月會員回購禮','分眾訊息','09/01 – 09/30','8,600','52,340','進行中'],['新品香氛上市','社群廣告','08/28 – 09/18','21,580','89,210','進行中']].map((x,i)=>`<tr><td><strong>${x[0]}</strong></td><td>${x[1]}</td><td>${x[2]}</td><td>NT$ ${x[3]}</td><td>${x[4]==='—'?'—':'NT$ '+x[4]}</td><td><span class="pill ${i===0?'gray':''}">${x[5]}</span></td></tr>`).join('')}</tbody></table>`;
-  return `${pageHead('STORE MANAGEMENT',c[0],c[1],`<button class="primary-button open-create">＋ ${type==='orders'?'建立訂單':type==='products'?'新增商品':type==='customers'?'匯入顧客':'建立活動'}</button>`)}<section class="stat-strip">${c[2].map((x,i)=>`<article class="card stat-box"><small>${x}</small><strong>${c[3][i]}</strong><div class="delta">${i===1?'今日更新':'較上月 +'+(i+3)+'.'+i+'%'}</div></article>`).join('')}</section><div class="card toolbar"><div class="toolbar-left"><input class="field" type="search" placeholder="搜尋${c[0]}…"><select class="field"><option>全部狀態</option><option>進行中</option><option>待處理</option></select></div><div class="toolbar-right"><button class="ghost-button">${icon('filter')} 篩選</button><button class="ghost-button">${icon('download')} 匯出</button></div></div><article class="card data-card">${body}<div class="table-footer"><span>顯示 1–6，共 ${type==='customers'?'8,426':type==='products'?'42':'286'} 筆</span><div class="pagination"><button>‹</button><button class="active">1</button><button>2</button><button>3</button><button>›</button></div></div></article>`;
+  else body=`<table><thead><tr><th>活動名稱</th><th>類型</th><th>期間</th><th>優惠內容</th><th>使用次數</th><th>狀態</th></tr></thead><tbody>${[['週末滿額免運','免運','09/13 – 09/15','滿 NT$ 999','—','草稿'],['新品限時折扣','折價券','09/13 – 09/20','9 折','82','進行中'],['九月會員回購禮','會員優惠','09/01 – 09/30','折 NT$ 100','64','進行中']].map((x,i)=>`<tr><td><strong>${x[0]}</strong></td><td>${x[1]}</td><td>${x[2]}</td><td>${x[3]}</td><td>${x[4]}</td><td><span class="pill ${i===0?'gray':''}">${x[5]}</span></td></tr>`).join('')}</tbody></table>`;
+  return `${pageHead('STORE MANAGEMENT',c[0],c[1],`<button class="primary-button open-create">＋ ${type==='orders'?'建立訂單':type==='products'?'新增商品':type==='customers'?'匯入顧客':'建立活動'}</button>`)}<section class="stat-strip">${c[2].map((x,i)=>`<article class="card stat-box"><small>${x}</small><strong>${c[3][i]}</strong><div class="delta">${i===1?'今日更新':'較上月 +'+(i+3)+'.'+i+'%'}</div></article>`).join('')}</section><div class="card toolbar"><div class="toolbar-left"><input class="field" type="search" placeholder="搜尋${c[0]}…"><select class="field"><option>全部狀態</option><option>進行中</option><option>待處理</option></select></div><div class="toolbar-right"><button class="ghost-button">${icon('filter')} 篩選</button><button class="ghost-button">${icon('download')} 匯出</button></div></div><article class="card data-card">${body}<div class="table-footer"><span>顯示 1–${type==='products'?'3':'6'}，共 ${type==='customers'?'8,426':type==='products'?'3':'286'} 筆</span><div class="pagination"><button>‹</button><button class="active">1</button><button>2</button><button>3</button><button>›</button></div></div></article>`;
 }
 
 function analyticsPage() {
- return `${pageHead('INSIGHTS','營運分析','從銷售、顧客與商品表現掌握成長來源。',`<button class="date-control">${icon('calendar')} 最近 30 天⌄</button><button class="ghost-button">${icon('download')} 匯出報表</button>`)}<section class="stat-strip"><article class="card stat-box"><small>淨營收</small><strong>NT$ 358,420</strong><div class="delta">+11.4% 較上期</div></article><article class="card stat-box"><small>毛利率</small><strong>42.8%</strong><div class="delta">+2.6% 較上期</div></article><article class="card stat-box"><small>平均訂單金額</small><strong>NT$ 1,344</strong><div class="delta">+4.1% 較上期</div></article><article class="card stat-box"><small>廣告投資報酬</small><strong>4.7x</strong><div class="delta">+0.8x 較上期</div></article></section><section class="split-grid"><article class="card large-card"><div class="card-head"><div><h2>淨營收與毛利趨勢</h2><p>最近 30 天</p></div><div class="segmented"><button class="active">每日</button><button>每週</button></div></div><div class="chart-wrap">${lineChart([112,128,122,146,139,157,169,154,176,184,173,198,207,220])}</div></article><article class="card large-card"><div class="card-head"><div><h2>銷售來源</h2><p>依淨營收排序</p></div></div><div class="bar-chart">${[['自然搜尋',82,'NT$ 126K'],['付費廣告',67,'NT$ 103K'],['直接流量',45,'NT$ 69K'],['會員訊息',29,'NT$ 44K'],['社群推薦',11,'NT$ 16K']].map(x=>`<div class="bar-row"><span>${x[0]}</span><div class="bar-track"><i style="width:${x[1]}%"></i></div><b>${x[2]}</b></div>`).join('')}</div></article></section><section class="split-grid" style="margin-top:16px"><article class="card large-card"><div class="card-head"><div><h2>商品營收排行</h2><p>前五名商品貢獻 78% 營收</p></div><button class="text-link">完整商品報表</button></div>${products.slice(0,4).map((p,i)=>`<div class="market-row"><div class="customer-cell"><span class="product-thumb">${p[0]}</span><div><strong>${p[1]}</strong><small>${[36,18,14,10][i]}% 營收占比</small></div></div><div><strong>NT$ ${[138240,69120,53780,38420][i].toLocaleString()}</strong><em>+${[18.2,7.4,4.1,2.8][i]}%</em></div></div>`).join('')}</article><article class="card large-card"><div class="card-head"><div><h2>顧客組成</h2><p>依近 90 天購買行為</p></div></div><div style="display:grid;place-items:center;padding:13px"><div class="confidence-ring" style="width:150px;height:150px"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="49" fill="none" stroke="#edf0ec" stroke-width="16"/><circle cx="60" cy="60" r="49" fill="none" stroke="#247258" stroke-width="16" stroke-dasharray="308" stroke-dashoffset="188"/><circle cx="60" cy="60" r="49" fill="none" stroke="#87ad9d" stroke-width="16" stroke-dasharray="308" stroke-dashoffset="242" stroke-dashoffset="120"/></svg><div><strong>8,426</strong><small>總顧客數</small></div></div></div><div class="market-row"><span>新顧客</span><strong>62%</strong></div><div class="market-row"><span>回購顧客</span><strong>27%</strong></div><div class="market-row"><span>高價值顧客</span><strong>11%</strong></div></article></section>`;
+ return `${pageHead('INSIGHTS','營運分析','從銷售、顧客與商品表現掌握成長來源。',`<button class="date-control">${icon('calendar')} 最近 30 天⌄</button><button class="ghost-button">${icon('download')} 匯出報表</button>`)}<section class="stat-strip"><article class="card stat-box"><small>淨營收</small><strong>NT$ 358,420</strong><div class="delta">+11.4% 較上期</div></article><article class="card stat-box"><small>毛利率</small><strong>42.8%</strong><div class="delta">+2.6% 較上期</div></article><article class="card stat-box"><small>平均訂單金額</small><strong>NT$ 1,344</strong><div class="delta">+4.1% 較上期</div></article><article class="card stat-box"><small>促銷轉換率</small><strong>5.2%</strong><div class="delta">+0.8% 較上期</div></article></section><section class="split-grid"><article class="card large-card"><div class="card-head"><div><h2>淨營收與毛利趨勢</h2><p>最近 30 天</p></div><div class="segmented"><button class="active">每日</button><button>每週</button></div></div><div class="chart-wrap">${lineChart([112,128,122,146,139,157,169,154,176,184,173,198,207,220])}</div></article><article class="card large-card"><div class="card-head"><div><h2>銷售來源</h2><p>依淨營收排序</p></div></div><div class="bar-chart">${[['自然搜尋',82,'NT$ 126K'],['直接流量',67,'NT$ 103K'],['會員活動',45,'NT$ 69K'],['會員訊息',29,'NT$ 44K'],['社群推薦',11,'NT$ 16K']].map(x=>`<div class="bar-row"><span>${x[0]}</span><div class="bar-track"><i style="width:${x[1]}%"></i></div><b>${x[2]}</b></div>`).join('')}</div></article></section><section class="split-grid" style="margin-top:16px"><article class="card large-card"><div class="card-head"><div><h2>商品營收排行</h2><p>前三名商品營收表現</p></div><button class="text-link">完整商品報表</button></div>${products.slice(0,3).map((p,i)=>`<div class="market-row"><div class="customer-cell"><span class="product-thumb">${p[0]}</span><div><strong>${p[1]}</strong><small>${[36,18,14][i]}% 營收占比</small></div></div><div><strong>NT$ ${[138240,69120,53780][i].toLocaleString()}</strong><em>+${[18.2,7.4,4.1][i]}%</em></div></div>`).join('')}</article><article class="card large-card"><div class="card-head"><div><h2>顧客組成</h2><p>依近 90 天購買行為</p></div></div><div style="display:grid;place-items:center;padding:13px"><div class="confidence-ring" style="width:150px;height:150px"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="49" fill="none" stroke="#edf0ec" stroke-width="16"/><circle cx="60" cy="60" r="49" fill="none" stroke="#247258" stroke-width="16" stroke-dasharray="308" stroke-dashoffset="188"/><circle cx="60" cy="60" r="49" fill="none" stroke="#87ad9d" stroke-width="16" stroke-dasharray="308" stroke-dashoffset="242" stroke-dashoffset="120"/></svg><div><strong>8,426</strong><small>總顧客數</small></div></div></div><div class="market-row"><span>新顧客</span><strong>62%</strong></div><div class="market-row"><span>回購顧客</span><strong>27%</strong></div><div class="market-row"><span>高價值顧客</span><strong>11%</strong></div></article></section>`;
 }
 
 function experimentsPage() {
@@ -176,11 +163,11 @@ function experimentsPage() {
 }
 
 function settingsPage() {
-  return `${pageHead('SETTINGS','商店設定','管理基本資訊、AI 店長權限與通知偏好。')}<section class="split-grid"><article class="card large-card"><div class="card-head"><div><h2>商店基本資料</h2><p>顯示於訂單與顧客通知</p></div></div><div class="form-grid"><div class="form-group"><label>商店名稱</label><input value="森日選物"></div><div class="form-group"><label>預設幣別</label><select><option>新台幣（TWD）</option></select></div><div class="form-group"><label>客服信箱</label><input value="hello@senri.tw"></div><div class="form-group"><label>營運時區</label><select><option>台北（GMT+8）</option></select></div><div class="form-group full"><label>商店簡介</label><textarea>選擇耐用、簡約且對生活友善的日常用品。</textarea></div></div><div class="modal-footer"><button class="primary-button save-settings">儲存變更</button></div></article><article class="card large-card"><div class="card-head"><div><h2>AI 店長權限</h2><p>控制建議可以執行到什麼程度</p></div></div>${[['商品售價','AI 自動執行'],['最低毛利','永遠強制保護'],['廣告預算','需要人工確認'],['庫存補貨','低於 NT$ 10,000 可自動'],['顧客訊息','需要人工確認']].map(x=>`<div class="market-row"><span>${x[0]}</span><strong>${x[1]}</strong></div>`).join('')}</article></section><article class="card large-card ai-settings-card"><div class="card-head"><div><h2>GPT 連線</h2><p>API key 僅儲存在本機伺服器的 .env，不會寫入瀏覽器儲存空間。</p></div><span class="pill gray" id="settingsAIStatus">檢查中</span></div><div class="market-row"><span>目前模型</span><strong id="settingsAIModel">gpt-4o-mini</strong></div><div class="modal-footer"><button class="primary-button ai-connect-button">設定 OpenAI API</button></div></article>`;
+  return `${pageHead('SETTINGS','商店設定','管理基本資訊、AI 店長權限與通知偏好。')}<section class="split-grid"><article class="card large-card"><div class="card-head"><div><h2>商店基本資料</h2><p>顯示於訂單與顧客通知</p></div></div><div class="form-grid"><div class="form-group"><label>商店名稱</label><input value="森日選物"></div><div class="form-group"><label>預設幣別</label><select><option>新台幣（TWD）</option></select></div><div class="form-group"><label>客服信箱</label><input value="hello@senri.tw"></div><div class="form-group"><label>營運時區</label><select><option>台北（GMT+8）</option></select></div><div class="form-group full"><label>商店簡介</label><textarea>選擇耐用、簡約且對生活友善的日常用品。</textarea></div></div><div class="modal-footer"><button class="primary-button save-settings">儲存變更</button></div></article><article class="card large-card"><div class="card-head"><div><h2>AI 店長權限</h2><p>控制建議可以執行到什麼程度</p></div></div>${[['商品售價','AI 自動執行'],['最低毛利','永遠強制保護'],['促銷策略','AI 自動執行'],['庫存補貨','通知賣家確認'],['顧客訊息','需要人工確認']].map(x=>`<div class="market-row"><span>${x[0]}</span><strong>${x[1]}</strong></div>`).join('')}</article></section><article class="card large-card ai-settings-card"><div class="card-head"><div><h2>GPT 連線</h2><p>API key 僅儯存在本機伺服器的 .env，不會寫入瀏覽器儲存空間。</p></div><span class="pill gray" id="settingsAIStatus">檢查中</span></div><div class="market-row"><span>目前模型</span><strong id="settingsAIModel">gpt-4o-mini</strong></div><div class="modal-footer"><button class="primary-button ai-connect-button">設定 OpenAI API</button></div></article>`;
 }
 
 const pages = {
-  overview: ['營運總覽', overviewPage], manager: ['AI 店長', managerPage], simulation: ['市場模擬', simulationPage], orders: ['訂單管理', ()=>listPage('orders')], products: ['商品與庫存', ()=>listPage('products')], customers: ['顧客', ()=>listPage('customers')], marketing: ['行銷活動', ()=>listPage('marketing')], analytics: ['營運分析', analyticsPage], experiments: ['策略評測', experimentsPage], settings: ['商店設定', settingsPage]
+  overview: ['營運總覽', overviewPage], manager: ['AI 店長', managerPage], orders: ['訂單管理', ()=>listPage('orders')], products: ['商品與庫存', ()=>listPage('products')], customers: ['顧客', ()=>listPage('customers')], marketing: ['促銷活動', ()=>listPage('marketing')], analytics: ['營運分析', analyticsPage], experiments: ['策略評測', experimentsPage], settings: ['商店設定', settingsPage]
 };
 
 function navigate(page, push=true) {
@@ -235,7 +222,7 @@ async function loadPersistedProducts() {
   if(!body) return;
   try{
     const result=await api('/api/products');
-    body.querySelectorAll('[data-persisted-product]').forEach(row=>row.remove());
+    body.innerHTML='';
     (result.products || []).forEach(product=>{
       const row=document.createElement('tr');row.dataset.persistedProduct=product.id;
       const inventory=Number(product.inventory), threshold=Number(product.low_stock_threshold || 0), outOfStock=inventory===0, lowStock=!outOfStock&&inventory<=threshold;
@@ -253,66 +240,6 @@ async function api(path, options={}) {
   const data = await response.json().catch(()=>({error:'伺服器回傳格式不正確'}));
   if (!response.ok) throw new Error(data.error || `請求失敗（${response.status}）`);
   return data;
-}
-
-function renderSimulatorDashboard(payload) {
-  const state=payload.state || {}, run=payload.last_agent_run || payload.agent_run, catalog=state.catalog || [], listings=state.listings || [];
-  const catalogById=Object.fromEntries(catalog.map(item=>[item.id,item]));
-  const pilot=listings.filter(item=>item.seller==='pilot'), metrics=state.metrics || {};
-  document.getElementById('simConnection').textContent='MarketSimulator 已連線';
-  document.getElementById('simHeadline').textContent=state.day?`第 ${state.day} 天市場已結算`:'市場已就緒，等待 AI 店長上架';
-  document.getElementById('simDescription').textContent=run?.phase==='daily_ai'?`GPT 已依第 ${run.observation_day} 天銷售資料調整全部商品，並完成第 ${run.simulation_day} 天交易。`:'首次推進會由 GPT 決定全部商品初始售價，再由市場買家產生成交。';
-  document.getElementById('simDay').textContent=String(state.day ?? 0);
-  const metricValues=[money(metrics.revenue || 0),money(metrics.profit || 0),`${Number(metrics.units || 0).toLocaleString()} 件`,`${Number(metrics.share || 0).toFixed(1)}%`];
-  document.getElementById('simMetrics').innerHTML=['累積營收','累積利潤','銷售件數','市場佔有率'].map((label,index)=>`<article class="card stat-box"><small>${label}</small><strong>${metricValues[index]}</strong><div class="delta">截至第 ${state.day || 0} 天</div></article>`).join('');
-  document.getElementById('simProductCount').textContent=`${pilot.length} 項`;
-  document.getElementById('simProducts').innerHTML=pilot.length?pilot.map(listing=>{
-    const product=catalogById[listing.productId] || {}, competitors=listings.filter(item=>item.seller!=='pilot'&&item.productId===listing.productId), competitor=competitors.length?competitors.reduce((sum,item)=>sum+Number(item.price),0)/competitors.length:null;
-    return `<div class="sim-product"><span class="product-thumb">${product.emoji || '📦'}</span><div><strong>${escapeHTML(product.name || listing.productId)}</strong><small>${listing.inventory} 件庫存 · 已售 ${listing.unitsSold} 件${competitor?` · 競品 ${money(competitor)}`:''}</small></div><div><strong>${money(listing.price)}</strong><small>廣告 ${money(listing.adBudget || 0)} · 折扣 ${(Number(listing.couponDiscount || 0)*100).toFixed(0)}%</small></div></div>`;
-  }).join(''):'<div class="empty-inline">第一次推進後，GPT 會自動上架全部商品</div>';
-  const events=state.events || [];
-  document.getElementById('simEvents').innerHTML=events.length?events.map(event=>`<div class="market-row"><span>${escapeHTML(event.name)}</span><div><strong>${Number(event.effect)>1?'需求上升':'需求下降'} ${Math.round(Math.abs(Number(event.effect)-1)*100)}%</strong><em>${event.category?escapeHTML(event.category):'全市場'} · ${event.duration} 天</em></div></div>`).join(''):'<div class="empty-inline">目前沒有突發市場事件</div>';
-  document.getElementById('simLogs').innerHTML=(state.logs || []).slice(0,6).map(line=>`<p>${escapeHTML(line)}</p>`).join('');
-  const decisions=run?.decisions || [];
-  document.getElementById('simDecisionStatus').textContent=decisions.length?`${decisions.length} 項已執行`:'等待執行';
-  document.getElementById('simDecisions').innerHTML=decisions.length?decisions.map((decision,index)=>{
-    const action=decision.action || {}, detail=decision.decision || {};
-    return `<article class="card recommendation sim-decision"><div class="rec-top"><span class="rec-icon">${icon('spark')}</span><span class="rec-impact">${escapeHTML(decision.sku)}</span></div><h3>${escapeHTML(catalogById[decision.sku]?.name || decision.name || decision.sku)}</h3><p>${escapeHTML(detail.summary || 'AI 初始上架定價')}</p><div class="decision-values"><span>售價 <b>${money(action.price || 0)}</b></span>${action.ad_budget===undefined?'':`<span>廣告 <b>${money(action.ad_budget)}</b></span><span>折扣 <b>${(Number(action.coupon_discount)*100).toFixed(0)}%</b></span><span>促銷 <b>${(Number(action.promotion_level)*100).toFixed(0)}%</b></span>`}</div><button class="ghost-button sim-reason" data-sim-decision="${index}">${icon('eye')} 查看 AI 判斷原因</button></article>`;
-  }).join(''):'<article class="card empty-state ai-empty"><span class="metric-icon">'+icon('spark')+'</span><h3>尚無模擬決策</h3><p>第一次推進會由 GPT 自動上架所有商品。</p></article>';
-  document.querySelectorAll('.sim-reason').forEach(button=>button.onclick=()=>openSimulatorDecision(decisions[Number(button.dataset.simDecision)],catalogById));
-  const notifications=run?.seller_notifications || [];
-  document.getElementById('simNotificationCount').textContent=`${notifications.length} 則`;
-  document.getElementById('simNotifications').innerHTML=notifications.length?notifications.map(item=>`<div class="sim-notification"><div><strong>${escapeHTML(item.name)}</strong><p>${escapeHTML(item.reason)}</p></div><button class="primary-button simulator-restock" data-product-id="${escapeHTML(item.product_id)}" data-quantity="${Number(item.quantity)}">確認補貨 ${Number(item.quantity)} 件</button></div>`).join(''):'<div class="empty-inline">目前沒有待確認補貨</div>';
-  document.querySelectorAll('.simulator-restock').forEach(button=>button.onclick=()=>queueSimulatorRestock(button));
-}
-
-function openSimulatorDecision(decision, catalogById) {
-  const action=decision.action || {}, detail=decision.decision || {}, reasons=detail.reasons || {}, name=catalogById[decision.sku]?.name || decision.name || decision.sku;
-  openModal(`<h2>${escapeHTML(name)} · AI 決策</h2><p>${escapeHTML(detail.summary || '初始上架定價')}</p><div class="reason-summary"><span class="pill">${escapeHTML(decision.meta?.model || 'GPT')}</span><strong>信心分數 ${Number(detail.confidence || 0)}%</strong></div>${Object.entries({定價:reasons.price,廣告:reasons.advertising,庫存:reasons.inventory,促銷:reasons.promotion}).filter(([,value])=>value).map(([label,value])=>`<div class="reason-block"><small>${label}判斷</small><p>${escapeHTML(value)}</p></div>`).join('')}<div class="reason-block"><small>套用數值</small><p>售價 ${money(action.price || 0)}${action.ad_budget===undefined?'':` · 廣告 ${money(action.ad_budget)} · 折扣 ${(Number(action.coupon_discount)*100).toFixed(0)}% · 促銷 ${(Number(action.promotion_level)*100).toFixed(0)}% · 建議補貨 ${Number(action.reorder_quantity)} 件`}</p></div><div class="modal-footer"><button class="primary-button modal-cancel">關閉</button></div>`);
-  modalContent.querySelector('.modal-cancel').onclick=closeModal;
-}
-
-async function loadSimulatorDashboard() {
-  try { renderSimulatorDashboard(await api('/api/simulator/dashboard')); }
-  catch(error){document.getElementById('simConnection').textContent='MarketSimulator 未啟動';document.getElementById('simHeadline').textContent='請啟動完整市場環境';document.getElementById('simDescription').textContent=error.message;}
-}
-
-async function runSimulatorDay(button) {
-  button.disabled=true;const label=button.innerHTML;button.innerHTML='<span class="spinner"></span> GPT 決策與市場交易中';
-  try {const result=await api('/api/simulator/run-day',{method:'POST',body:'{}'});renderSimulatorDashboard(result);showToast(`市場已推進至第 ${result.state.day} 天`);}
-  catch(error){showToast(error.message);}
-  finally{button.disabled=false;button.innerHTML=label;}
-}
-
-async function resetSimulatorMarket() {
-  try {const result=await api('/api/simulator/reset',{method:'POST',body:JSON.stringify({seed:12345})});renderSimulatorDashboard({state:result.state,last_agent_run:null});showToast('市場已重置');}
-  catch(error){showToast(error.message);}
-}
-
-async function queueSimulatorRestock(button) {
-  button.disabled=true;
-  try {await api('/api/simulator/restock',{method:'POST',body:JSON.stringify({product_id:button.dataset.productId,quantity:Number(button.dataset.quantity)})});button.textContent='已排入下一日';showToast('補貨已排入下一個模擬日');}
-  catch(error){button.disabled=false;showToast(error.message);}
 }
 
 async function loadAIStatus() {
@@ -352,7 +279,7 @@ function renderAIAnalysis(payload) {
   const generatedLabel=generatedAt.toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
   document.getElementById('aiSummary').textContent=data.summary;
   document.getElementById('aiAnalysisLabel').innerHTML=`<i></i>${meta.cache_hit?'今日分析已保存':'今日 GPT 分析完成'} · ${generatedLabel}`;
-  document.getElementById('aiSummaryNote').textContent='此分析每天產生一次並保存至隔日。定價、廣告與促銷策略會自動套用；即將缺貨時會通知賣家補貨。';
+  document.getElementById('aiSummaryNote').textContent='此分析每天產生一次並保存至隔日。定價與促銷策略會自動套用；即將缺貨時會通知賣家補貨。';
   document.getElementById('confidenceValue').textContent=`${data.confidence}%`;
   document.getElementById('confidenceLabel').textContent=data.confidence>=80?'高可信':data.confidence>=60?'中等可信':'需審慎評估';
   document.getElementById('confidenceProgress').style.strokeDashoffset=String(320-(320*data.confidence/100));
@@ -362,7 +289,7 @@ function renderAIAnalysis(payload) {
   document.getElementById('analysisSource').textContent=meta.context_source==='external_environment'?'外部環境':meta.context_source==='api_request'?'API 資料':'商店資料';
   document.getElementById('analysisCount').textContent=`${executions.length} 項`;
   const executionSummary=document.getElementById('executionSummary');if(executionSummary)executionSummary.textContent=`今日已自動處理 ${executions.length} 項`;
-  const categoryIcons={advertising:'megaphone',inventory:'truck',pricing:'tag',promotion:'target',customer:'users'};
+  const categoryIcons={inventory:'truck',pricing:'tag',promotion:'target',customer:'users'};
   document.getElementById('recommendationGrid').innerHTML=recommendations.map((item,index)=>recommendation(
     categoryIcons[item.category] || 'spark',
     escapeHTML(item.title), escapeHTML(item.suggested_value),
@@ -454,9 +381,6 @@ function bindPageEvents() {
   document.querySelectorAll('.chart-range button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.chart-range button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.getElementById('salesChart').innerHTML=lineChart(salesData[b.dataset.range]);});
   document.querySelectorAll('.ai-connect-button').forEach(b=>b.onclick=openAISettings);
   document.querySelectorAll('.ai-run-button').forEach(b=>b.onclick=e=>runGPTAnalysis(e.currentTarget));
-  document.querySelectorAll('.simulator-run').forEach(b=>b.onclick=()=>runSimulatorDay(b));
-  document.querySelectorAll('.simulator-reset').forEach(b=>b.onclick=resetSimulatorMarket);
-  document.querySelectorAll('.simulator-marketplace').forEach(b=>b.onclick=()=>window.open('http://127.0.0.1:5173','_blank','noopener'));
   const dismiss=document.querySelector('.dismiss-brief'); if(dismiss) dismiss.onclick=()=>{dismiss.closest('.briefing').style.opacity='.55';showToast('提醒已移到稍後處理');};
   document.querySelectorAll('.open-create').forEach(b=>b.onclick=()=>createModal(b.textContent.trim().replace('＋ ','')));
   document.querySelectorAll('.save-settings').forEach(b=>b.onclick=()=>showToast('商店設定已儲存'));
@@ -465,7 +389,6 @@ function bindPageEvents() {
   if(document.getElementById('aiConnection')) initializeAIManager();
   else if(document.getElementById('settingsAIStatus')) loadAIStatus();
   if(document.getElementById('productRows')) loadPersistedProducts();
-  if(document.getElementById('simConnection')) loadSimulatorDashboard();
 }
 
 document.querySelectorAll('.nav-item[data-page]').forEach(b=>b.addEventListener('click',()=>navigate(b.dataset.page)));
@@ -475,7 +398,7 @@ document.getElementById('modalClose').onclick=closeModal;
 modalBackdrop.addEventListener('click',e=>{if(e.target===modalBackdrop)closeModal()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openSearch();}});
 document.getElementById('searchBtn').onclick=openSearch;
-function openSearch(){openModal(`<h2>快速搜尋</h2><p>搜尋訂單、商品或顧客。</p><div class="form-group" style="margin-bottom:14px"><input autofocus placeholder="輸入名稱、編號或 Email"></div><div class="search-results"><div class="search-result"><span>${icon('bag')}</span><div><strong>#MP-10482 · 陳怡安</strong><small>訂單 · NT$ 2,990 · 已付款</small></div></div><div class="search-result"><span>${icon('box')}</span><div><strong>無線降噪耳機</strong><small>商品 · SKU-001 · 庫存 218 件</small></div></div><div class="search-result"><span>${icon('users')}</span><div><strong>陳怡安</strong><small>顧客 · 12 筆訂單 · 高價值顧客</small></div></div></div>`);setTimeout(()=>modalContent.querySelector('input')?.focus(),50);}
+function openSearch(){openModal(`<h2>快速搜尋</h2><p>搜尋訂單、商品或顧客。</p><div class="form-group" style="margin-bottom:14px"><input autofocus placeholder="輸入名稱、編號或 Email"></div><div class="search-results"><div class="search-result"><span>${icon('bag')}</span><div><strong>#MP-10482 · 陳怡安</strong><small>訂單 · NT$ 799 · 已付款</small></div></div><div class="search-result"><span>${icon('box')}</span><div><strong>手錶</strong><small>商品 · AI-3FD44584 · 庫存 50 件</small></div></div><div class="search-result"><span>${icon('users')}</span><div><strong>陳怡安</strong><small>顧客 · 12 筆訂單 · 高價值顧客</small></div></div></div>`);setTimeout(()=>modalContent.querySelector('input')?.focus(),50);}
 window.addEventListener('popstate',e=>navigate(e.state?.page || location.hash.slice(1) || 'overview',false));
 
 navigate(location.hash.slice(1)||'overview',false);
