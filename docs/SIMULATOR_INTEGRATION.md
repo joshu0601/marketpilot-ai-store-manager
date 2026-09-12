@@ -55,3 +55,9 @@ python3 run_all.py
 - `GET /api/state`：包含 `orders`、`lastAgentRun`、`agentHistory` 與逐 SKU 的 `dailyResults`。
 
 GPT 使用 Responses API 的結構化輸出：[official OpenAI documentation](https://developers.openai.com/api/docs/guides/structured-outputs)。
+
+## 後台營運報表
+
+`GET /api/analytics` 只讀取模擬器已提交狀態，不呼叫 GPT。營運總覽與營運分析共用此 API，每 5 秒更新。核心數字為整次模擬的 MarketPilot 累計營收、毛利、銷量；競品只納入市場總銷量及市占率。
+
+每日趨勢由歷史累計數字相減產生。商品毛利使用成交時累積的利潤，不用目前成本重算。訂單與顧客統計只使用實際保存的本店成交明細，若舊版明細不足，保留完整的營收與銷量、標記明細不完整並停用平均訂單金額。重置後報表會回到第 0 天。趨勢期間選擇只影響圖表，累計指標仍是整次模擬。

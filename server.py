@@ -898,6 +898,53 @@ def simulator_dashboard() -> dict:
     return {"state": state, "last_agent_run": state.get("lastAgentRun")}
 
 
+def operational_analytics(state: dict) -> dict:
+    """Report only committed simulator results; never revalue past sales at today's cost."""
+    catalog = simulator_catalog_map(state)
+    listings = state.get("listings", [])
+    pilot = [item for item in listings if item.get("seller") == "pilot"]
+    revenue = sum(float(item.get("revenue", 0)) for item in pilot)
+    profit = sum(float(item.get("profit", 0)) for item in pilot)
+    units = sum(int(item.get("unitsSold", 0)) for item in pilot)
+    market_units = sum(int(item.get("unitsSold", 0)) for item in listings)
+    orders = [item for item in state.get("orders", []) if item.get("seller") == "pilot" and item.get("status") == "completed"]
+    order_revenue = sum(float(item.get("total", 0)) for item in orders)
+    order_units = sum(int(item.get("quantity", 0)) for item in orders)
+    complete_orders = order_units == units and abs(order_revenue - revenue) < .01
+    customers = {}
+    for order in orders:
+        name = order.get("buyer", "未記名買家")
+        customer = customers.setdefault(name, {"name": name, "orders": 0, "revenue": 0})
+        customer["orders"] += 1
+        customer["revenue"] += float(order.get("total", 0))
+    daily = []
+    previous = {"revenue": 0, "profit": 0, "units": 0}
+    for point in sorted(state.get("history", []), key=lambda item: item["day"]):
+        daily.append({"day": point["day"], "revenue": round(float(point.get("revenue", 0)) - previous["revenue"], 2), "profit": round(float(point.get("profit", 0)) - previous["profit"], 2), "units": int(point.get("units", 0)) - previous["units"]})
+        previous = {key: point.get(key, 0) for key in previous}
+    products = []
+    for listing in pilot:
+        product = catalog.get(listing["productId"], {})
+        earned = float(listing.get("revenue", 0))
+        gross_profit = float(listing.get("profit", 0))
+        stock = int(listing.get("inventory", 0))
+        threshold = int(product.get("lowStockThreshold", 0))
+        products.append({"sku": listing["productId"], "name": product.get("name", listing["productId"]), "revenue": round(earned, 2), "profit": round(gross_profit, 2), "units": int(listing.get("unitsSold", 0)), "revenue_share": earned / revenue if revenue else 0, "gross_margin": gross_profit / earned if earned else None, "price": listing["price"], "inventory": stock, "low_stock_threshold": threshold, "low_stock": stock <= threshold})
+    sellers = []
+    for seller_id in dict.fromkeys(item.get("seller") for item in listings):
+        seller_units = sum(int(item.get("unitsSold", 0)) for item in listings if item.get("seller") == seller_id)
+        sellers.append({"id": seller_id, "name": state.get("sellers", {}).get(seller_id, seller_id), "units": seller_units, "share": seller_units / market_units if market_units else 0})
+    return {
+        "source": "market_simulator", "day": state.get("day", 0), "synced_at": datetime.now(TAIPEI_TIMEZONE).isoformat(),
+        "totals": {"revenue": round(revenue, 2), "profit": round(profit, 2), "gross_margin": profit / revenue if revenue else None, "units": units, "inventory": sum(int(item.get("inventory", 0)) for item in pilot), "market_units": market_units, "market_share": units / market_units if market_units else 0, "order_count": len(orders) if complete_orders else None, "average_order_value": order_revenue / len(orders) if complete_orders and orders else None},
+        "daily": daily, "products": sorted(products, key=lambda item: item["revenue"], reverse=True), "sellers": sorted(sellers, key=lambda item: item["units"], reverse=True),
+        "orders": sorted(orders, key=lambda item: item["day"], reverse=True),
+        "customers": {"count": len(customers), "new": sum(item["orders"] == 1 for item in customers.values()), "returning": sum(item["orders"] > 1 for item in customers.values()), "records_complete": complete_orders},
+        "coverage": {"orders_complete": complete_orders, "recorded_orders": len(orders), "recorded_revenue": round(order_revenue, 2)},
+        "notifications": (state.get("lastAgentRun") or {}).get("seller_notifications", []),
+    }
+
+
 def simulator_daily_sales(result: dict) -> DailySales:
     units = max(0, int(result.get("unitsSold", 0)))
     traffic = max(5, units * 3)
@@ -1069,6 +1116,12 @@ class MarketPilotHandler(SimpleHTTPRequestHandler):
                 "daily_all_products_pull_endpoint": "POST /api/agent/sync-all",
                 "authentication": "Optional Bearer token when MARKETPILOT_API_KEY is configured",
             })
+            return
+        if path == "/api/analytics":
+            try:
+                self._json({"ok": True, **operational_analytics(simulator_request("/api/state"))})
+            except Exception:
+                self._json({"ok": False, "error": "無法取得市場資料，請確認模擬器已啟動後重試。"}, HTTPStatus.BAD_GATEWAY)
             return
         if path == "/api/products":
             self._json({"products": current_products()})

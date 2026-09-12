@@ -392,3 +392,5 @@ td { padding: 12px 14px; border-top: 1px solid var(--line); font-size: 10.5px; }
   .decision-metrics { gap: 17px; }
   .manager-main { padding: 21px; }
 }
+
+.report-status{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px;color:var(--muted);font-size:12px}.report-chart{height:240px}.report-legend{display:flex;justify-content:center;gap:22px;font-size:12px;color:#247258;margin-top:8px}.report-legend span:last-child{color:#c98945}.report-section{margin-top:16px}.report-table{overflow-x:auto}.report-table td small{display:block;color:var(--muted);margin-top:4px}#reportError{padding:12px;background:#fff3e7;color:#9b542a;border-radius:6px}.report-status button{flex-shrink:0}
