@@ -236,6 +236,28 @@ td { padding: 12px 14px; border-top: 1px solid var(--line); font-size: 10.5px; }
 .reason-block { padding: 14px 0; border-top: 1px solid var(--line); }
 .reason-block small { display: block; margin-bottom: 6px; color: var(--muted); font-weight: 650; }
 .reason-block p { margin: 0; line-height: 1.7; }
+.simulation-status { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 24px 26px; margin-bottom: 14px; background: linear-gradient(120deg,#17382f,#234d40); color: #fff; }
+.simulation-status h2 { margin: 10px 0 5px; font-size: 22px; }
+.simulation-status p { margin: 0; color: #b8cec5; }
+.sim-day { min-width: 120px; text-align: center; }
+.sim-day small { display: block; color: #b8cec5; }
+.sim-day strong { display: block; margin: 2px 0 10px; font-size: 34px; }
+.simulation-grid { margin-top: 14px; }
+.sim-products { display: grid; gap: 3px; }
+.sim-product { display: grid; grid-template-columns: 40px 1fr auto; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.sim-product:last-child { border-bottom: 0; }
+.sim-product div:last-child { text-align: right; }
+.sim-product small { display: block; margin-top: 3px; color: var(--muted); }
+.sim-log { max-height: 170px; overflow: auto; margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--line); }
+.sim-log p { margin: 0; padding: 5px 0; color: var(--muted); font-size: 10px; }
+.decision-values { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; margin: 12px 0; }
+.decision-values span { padding: 7px 8px; border-radius: 7px; background: var(--soft); color: var(--muted); font-size: 9px; }
+.decision-values b { display: block; margin-top: 2px; color: var(--ink); font-size: 11px; }
+.sim-reason { width: 100%; }
+.sim-reason svg { width: 14px; height: 14px; }
+.sim-notifications { margin-top: 14px; }
+.sim-notification { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 12px 0; border-top: 1px solid var(--line); }
+.sim-notification p { margin: 4px 0 0; color: var(--muted); }
 .timeline-card { grid-column: span 7; padding: 20px; }
 .context-card { grid-column: span 5; padding: 20px; }
 .timeline { display: grid; }

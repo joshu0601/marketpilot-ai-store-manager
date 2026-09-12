@@ -300,6 +300,44 @@ class ServerTests(unittest.TestCase):
         self.assertEqual({item["sku"] for item in result["decisions"]}, {"SKU-001", "SKU-002"})
         self.assertTrue(all(item["action"]["promotion_level"] == 0.25 for item in result["decisions"]))
 
+    def simulator_state(self):
+        return {
+            "day": 1,
+            "catalog": [{"id": "P001", "name": "測試衣服", "category": "服飾", "cost": 300}],
+            "listings": [
+                {"id": "pilot-P001", "seller": "pilot", "productId": "P001", "price": 500, "inventory": 8, "adBudget": 100, "couponDiscount": 0, "promotionLevel": 0},
+                {"id": "npc-P001", "seller": "npc1", "productId": "P001", "price": 480, "inventory": 30},
+            ],
+            "dailyResults": [{"day": 1, "listingId": "pilot-P001", "seller": "pilot", "productId": "P001", "price": 500, "unitCost": 300, "unitsSold": 3, "revenue": 1500, "grossProfit": 600, "inventory": 8, "adBudget": 100, "couponDiscount": 0, "promotionLevel": 0}],
+            "dailyHistory": [], "events": [{"name": "服飾熱門", "effect": 1.3, "duration": 2, "category": "服飾"}],
+        }
+
+    def test_simulator_state_becomes_previous_day_agent_batch(self):
+        batch = server.simulator_batch(self.simulator_state())
+        item = batch.observations[0]
+        self.assertEqual(item.sku, "P001")
+        self.assertEqual(item.sales.units_sold, 3)
+        self.assertEqual(item.market.competitor_price, 480)
+        self.assertEqual(item.market.demand_index, 1.3)
+        self.assertEqual(item.inventory.on_hand, 8)
+
+    def test_simulator_applies_strategy_but_keeps_restock_as_seller_notification(self):
+        state = self.simulator_state()
+        decision = {
+            "sku": "P001", "action": {"price": 490, "ad_budget": 200, "coupon_discount": 0.05, "reorder_quantity": 40, "promotion_level": 0.2},
+            "decision": {"summary": "降低價格並增加曝光", "confidence": 80, "reasons": {"price": "接近競品", "advertising": "增加流量", "inventory": "低於安全庫存", "promotion": "提升轉換"}},
+            "meta": {"source": "ai", "model": "gpt-4o-mini"}, "guardrails": {"applied": [], "margin": {}},
+        }
+        next_state = {**state, "day": 2}
+        with (
+            patch.object(server, "simulator_request", side_effect=[state, {"accepted": []}, next_state]) as request,
+            patch.object(server, "decide_all_products", return_value={"decisions": [decision], "all_sources_ai": True}),
+            patch.object(server, "save_simulator_run"),
+        ):
+            result = server.run_simulator_day()
+        queued = request.call_args_list[1].args[2]["actions"]
+        self.assertEqual([item["type"] for item in queued], ["update_price", "update_strategy"])
+        self.assertEqual(result["agent_run"]["seller_notifications"][0]["quantity"], 40)
     def test_daily_batch_refuses_non_ai_fallback(self):
         batch = server.BatchDecisionRequest(
             observation_date="2026-09-11",

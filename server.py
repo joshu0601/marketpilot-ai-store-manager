@@ -16,6 +16,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
+from urllib.error import HTTPError, URLError
 from urllib.request import Request as URLRequest, urlopen
 from zoneinfo import ZoneInfo
 
@@ -28,6 +29,7 @@ ROOT = Path(__file__).resolve().parent
 ENV_FILE = ROOT / ".env"
 PRODUCTS_FILE = ROOT / "data" / "products.json"
 DAILY_ANALYSIS_FILE = ROOT / "data" / "daily_analysis.json"
+SIMULATOR_RUN_FILE = ROOT / "data" / "simulator_last_run.json"
 DEFAULT_MODEL = "gpt-4o-mini"
 PRODUCTS_LOCK = threading.Lock()
 DAILY_ANALYSIS_LOCK = threading.Lock()
@@ -155,6 +157,16 @@ class InitialPricingProposal(BaseModel):
     confidence: int = Field(ge=0, le=100)
 
 
+class SimulatorListingPrice(BaseModel):
+    product_id: str = Field(min_length=1, max_length=40)
+    price: float = Field(gt=0)
+    rationale: str = Field(min_length=5, max_length=160)
+
+
+class SimulatorBootstrapProposal(BaseModel):
+    listings: list[SimulatorListingPrice] = Field(min_length=1, max_length=20)
+
+
 DEFAULT_STORE_CONTEXT = {
     "store": "森日選物",
     "date": "2026-09-12",
@@ -217,6 +229,12 @@ DECISION_PROMPT = """你是 MarketPilot 的電商決策引擎。輸入是某 SKU
 INITIAL_PRICING_PROMPT = """你是 MarketPilot 的商品定價引擎。使用者只提供商品名稱、單位成本、初始庫存、預警庫存與不可突破的最低毛利率，由你決定商品的初始售價。
 
 請依商品名稱反映的品類定位、成本與庫存水位，提出一個合理、可直接使用的售價。售價必須高於滿足最低毛利率的價格；資料有限時採保守定價並降低 confidence。不得假裝知道未提供的競品、市場價格或品牌資料。使用繁體中文簡短說明理由。
+"""
+
+
+SIMULATOR_BOOTSTRAP_PROMPT = """你是 MarketPilot 的市場模擬上架經理。請替輸入目錄中的每一項商品建立一筆初始售價，product_id 必須原樣回傳且不可遺漏或重複。
+
+初始售價應反映品類、成本、品質與競品價格。售價至少需保留 30% 毛利，且不得超過成本五倍。資料不足時採保守定價。理由使用精簡繁體中文，不得杜撰未提供資訊。
 """
 
 
@@ -750,6 +768,207 @@ def create_product_with_ai(request: ProductCreateRequest) -> dict:
     return product
 
 
+def simulator_request(path: str, method: str = "GET", payload: dict | None = None) -> dict:
+    base_url = os.getenv("MARKETPILOT_SIMULATOR_URL", "http://127.0.0.1:3001").rstrip("/")
+    parsed = urlparse(base_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise ValueError("MARKETPILOT_SIMULATOR_URL 必須是有效的 http 或 https URL")
+    body = json.dumps(payload).encode("utf-8") if payload is not None else None
+    headers = {"Accept": "application/json"}
+    if body is not None:
+        headers["Content-Type"] = "application/json"
+    request = URLRequest(f"{base_url}{path}", data=body, headers=headers, method=method)
+    try:
+        with urlopen(request, timeout=180) as response:
+            raw = response.read(10_000_001)
+    except HTTPError as exc:
+        raw = exc.read(1_000_000)
+        try:
+            detail = json.loads(raw).get("error")
+        except (json.JSONDecodeError, AttributeError):
+            detail = None
+        raise RuntimeError(f"市場模擬器拒絕請求：{detail or exc.reason}") from exc
+    except URLError as exc:
+        raise RuntimeError("無法連線市場模擬器，請使用 python3 run_all.py 啟動完整環境") from exc
+    if len(raw) > 10_000_000:
+        raise RuntimeError("市場模擬器回應超過 10 MB")
+    result = json.loads(raw)
+    if not isinstance(result, dict):
+        raise RuntimeError("市場模擬器回應格式不正確")
+    return result
+
+
+def simulator_catalog_map(state: dict) -> dict[str, dict]:
+    return {str(item["id"]): item for item in state.get("catalog", []) if isinstance(item, dict) and item.get("id")}
+
+
+def save_simulator_run(payload: dict) -> None:
+    SIMULATOR_RUN_FILE.parent.mkdir(parents=True, exist_ok=True)
+    temporary = SIMULATOR_RUN_FILE.with_suffix(".tmp")
+    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    temporary.replace(SIMULATOR_RUN_FILE)
+
+
+def load_simulator_run() -> dict | None:
+    try:
+        payload = json.loads(SIMULATOR_RUN_FILE.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) and payload else None
+
+
+def simulator_dashboard() -> dict:
+    state = simulator_request("/api/state")
+    return {"state": state, "last_agent_run": load_simulator_run()}
+
+
+def bootstrap_simulator(state: dict) -> dict:
+    api_key, model = load_settings()
+    if not api_key:
+        raise ValueError("啟動 AI 市場模擬前必須先設定 OPENAI_API_KEY")
+    catalog = state.get("catalog", [])
+    listings = state.get("listings", [])
+    if not catalog:
+        raise RuntimeError("市場模擬器沒有商品目錄")
+    competitor_prices = {
+        item["id"]: [listing.get("price") for listing in listings if listing.get("productId") == item["id"] and listing.get("seller") != "pilot"]
+        for item in catalog
+    }
+    context = [
+        {
+            "product_id": item["id"], "name": item["name"], "category": item["category"],
+            "unit_cost": item["cost"], "quality": item.get("quality"),
+            "competitor_prices": competitor_prices.get(item["id"], []),
+        }
+        for item in catalog
+    ]
+    client = OpenAI(api_key=api_key)
+    response = client.responses.parse(
+        **response_parse_options(model, 4000),
+        input=[
+            {"role": "system", "content": SIMULATOR_BOOTSTRAP_PROMPT},
+            {"role": "user", "content": json.dumps(context, ensure_ascii=False)},
+        ],
+        text_format=SimulatorBootstrapProposal,
+    )
+    proposal = require_parsed_output(response, "GPT 沒有回傳可解析的模擬商品售價")
+    catalog_by_id = simulator_catalog_map(state)
+    proposed = {item.product_id: item for item in proposal.listings}
+    if set(proposed) != set(catalog_by_id):
+        raise RuntimeError("GPT 初始上架結果必須包含模擬器目錄中的所有商品")
+    actions = []
+    decisions = []
+    for product_id, product in catalog_by_id.items():
+        item = proposed[product_id]
+        minimum = math.ceil((float(product["cost"]) / 0.7) * 100) / 100
+        price = round(min(max(float(item.price), minimum), float(product["cost"]) * 5), 2)
+        actions.append({"type": "list_product", "productId": product_id, "price": price, "initial_inventory": 100})
+        decisions.append({"sku": product_id, "name": product["name"], "action": {"price": price}, "decision": {"summary": item.rationale, "confidence": 75}, "meta": {"source": "ai", "model": getattr(response, "model", model)}})
+    simulator_request("/api/actions", "POST", {"actions": actions})
+    next_state = simulator_request("/api/step", "POST", {"days": 1})
+    run = {"phase": "bootstrap", "simulation_day": next_state.get("day"), "decisions": decisions, "seller_notifications": [], "created_at": datetime.now(TAIPEI_TIMEZONE).isoformat()}
+    save_simulator_run(run)
+    return {"state": next_state, "agent_run": run}
+
+
+def simulator_daily_sales(result: dict) -> DailySales:
+    units = max(0, int(result.get("unitsSold", 0)))
+    traffic = max(5, units * 3)
+    return DailySales(
+        price=max(0.01, float(result.get("price", 0))),
+        unit_cost=max(0.01, float(result.get("unitCost", 0))),
+        units_sold=units,
+        revenue=max(0, float(result.get("revenue", 0))),
+        gross_profit=float(result.get("grossProfit", 0)),
+        traffic=traffic,
+        conversion_rate=min(1, units / traffic),
+        lost_sales=1 if int(result.get("inventory", 0)) == 0 else 0,
+        ad_budget=max(0, float(result.get("adBudget", 0))),
+        coupon_discount=max(0, min(1, float(result.get("couponDiscount", 0)))),
+        promotion_level=max(0, min(1, float(result.get("promotionLevel", 0)))),
+    )
+
+
+def simulator_batch(state: dict) -> BatchDecisionRequest:
+    catalog = simulator_catalog_map(state)
+    listings = state.get("listings", [])
+    daily_results = {item.get("productId"): item for item in state.get("dailyResults", []) if item.get("seller") == "pilot"}
+    pilot_listings = [item for item in listings if item.get("seller") == "pilot"]
+    if not pilot_listings or not daily_results:
+        raise RuntimeError("模擬器尚無可供 AI 判斷的前一日商品銷售資料")
+    observation_date = f"simulation-day-{int(state.get('day', 0)):04d}"
+    observations = []
+    for listing in pilot_listings:
+        product_id = listing["productId"]
+        product = catalog[product_id]
+        latest = daily_results.get(product_id)
+        if latest is None:
+            continue
+        competitors = [float(item["price"]) for item in listings if item.get("seller") != "pilot" and item.get("productId") == product_id]
+        competitor_price = sum(competitors) / len(competitors) if competitors else float(listing["price"])
+        active_events = [event for event in state.get("events", []) if not event.get("category") or event.get("category") == product.get("category")]
+        demand_index = math.prod(float(event.get("effect", 1)) for event in active_events) if active_events else 1
+        history = []
+        for daily in state.get("dailyHistory", []):
+            if daily.get("day") == state.get("day"):
+                continue
+            match = next((item for item in daily.get("results", []) if item.get("seller") == "pilot" and item.get("productId") == product_id), None)
+            if match:
+                history.append(simulator_daily_sales(match))
+        cost = float(product["cost"])
+        current_price = float(listing["price"])
+        observations.append(AgentDecisionRequest(
+            request_id=f"sim-{state.get('day')}-{product_id}",
+            observation_date=observation_date,
+            sku=product_id,
+            sales=simulator_daily_sales(latest),
+            market=MarketSnapshot(competitor_price=max(0.01, competitor_price), demand_index=max(0.01, demand_index), competitor_promotion_level=0),
+            inventory=InventorySnapshot(on_hand=max(0, int(listing.get("inventory", 0))), in_transit=0, lead_time_days=3),
+            events=[MarketEvent(type=str(event.get("name", "市場事件")), severity=min(1, abs(float(event.get("effect", 1)) - 1) / 0.5), description=f"影響係數 {event.get('effect', 1)}") for event in active_events],
+            history_7d=history[-7:],
+            last_action=Action(price=current_price, ad_budget=float(listing.get("adBudget", 0)), coupon_discount=float(listing.get("couponDiscount", 0)), reorder_quantity=0, promotion_level=float(listing.get("promotionLevel", 0))),
+            constraints=DecisionConstraints(target_gross_margin=.30, price_min=math.ceil((cost / .7) * 100) / 100, price_max=cost * 5, max_price_change_pct=.15, ad_budget_min=0, ad_budget_max=5000, max_ad_budget_change_pct=.30, coupon_discount_max=.30, reorder_quantity_max=500, promotion_level_max=1, safety_stock_days=5, target_stock_days=12),
+        ))
+    return BatchDecisionRequest(batch_id=f"market-simulator-day-{state.get('day')}", observation_date=observation_date, observations=observations)
+
+
+def run_simulator_day() -> dict:
+    state = simulator_request("/api/state")
+    if not any(item.get("seller") == "pilot" for item in state.get("listings", [])):
+        return bootstrap_simulator(state)
+    decisions = decide_all_products(simulator_batch(state))
+    actions = []
+    notifications = []
+    catalog = simulator_catalog_map(state)
+    for decision in decisions["decisions"]:
+        product_id = decision["sku"]
+        action = decision["action"]
+        actions.extend([
+            {"type": "update_price", "productId": product_id, "price": action["price"]},
+            {"type": "update_strategy", "productId": product_id, "ad_budget": action["ad_budget"], "coupon_discount": action["coupon_discount"], "promotion_level": action["promotion_level"]},
+        ])
+        if action["reorder_quantity"] > 0:
+            notifications.append({"product_id": product_id, "name": catalog.get(product_id, {}).get("name", product_id), "quantity": action["reorder_quantity"], "reason": decision["decision"]["reasons"]["inventory"], "status": "waiting_for_seller"})
+    simulator_request("/api/actions", "POST", {"actions": actions})
+    next_state = simulator_request("/api/step", "POST", {"days": 1})
+    run = {"phase": "daily_ai", "observation_day": state.get("day"), "simulation_day": next_state.get("day"), "decisions": decisions["decisions"], "seller_notifications": notifications, "created_at": datetime.now(TAIPEI_TIMEZONE).isoformat()}
+    save_simulator_run(run)
+    return {"state": next_state, "agent_run": run}
+
+
+def reset_simulator(seed: int = 12345) -> dict:
+    state = simulator_request("/api/reset", "POST", {"seed": seed})
+    save_simulator_run({})
+    return state
+
+
+def queue_simulator_restock(product_id: str, quantity: int) -> dict:
+    if not product_id or quantity <= 0 or quantity > 10_000:
+        raise ValueError("補貨商品與數量格式不正確")
+    result = simulator_request("/api/actions", "POST", {"actions": [{"type": "restock", "productId": product_id, "quantity": quantity}]})
+    return {"queued": True, "product_id": product_id, "quantity": quantity, "simulator": result}
+
+
 class MarketPilotHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(ROOT), **kwargs)
@@ -814,6 +1033,9 @@ class MarketPilotHandler(SimpleHTTPRequestHandler):
         if path == "/api/products":
             self._json({"products": load_products()})
             return
+        if path == "/api/simulator/dashboard":
+            self._json({"ok": True, **simulator_dashboard()})
+            return
         super().do_GET()
 
     def do_OPTIONS(self) -> None:
@@ -871,6 +1093,18 @@ class MarketPilotHandler(SimpleHTTPRequestHandler):
             if path == "/api/products":
                 product_request = ProductCreateRequest.model_validate(payload)
                 self._json({"ok": True, "product": create_product_with_ai(product_request)}, HTTPStatus.CREATED)
+                return
+            if path == "/api/simulator/run-day":
+                self._json({"ok": True, **run_simulator_day()})
+                return
+            if path == "/api/simulator/reset":
+                seed = int(payload.get("seed", 12345))
+                self._json({"ok": True, "state": reset_simulator(seed)})
+                return
+            if path == "/api/simulator/restock":
+                product_id = str(payload.get("product_id", "")).strip()
+                quantity = int(payload.get("quantity", 0))
+                self._json({"ok": True, **queue_simulator_restock(product_id, quantity)})
                 return
             self._json({"ok": False, "error": "找不到 API"}, HTTPStatus.NOT_FOUND)
         except ValidationError as exc:

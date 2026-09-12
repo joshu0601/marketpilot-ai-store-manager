@@ -18,6 +18,14 @@ python3 server.py
 
 然後前往 `http://127.0.0.1:8000`。請由 `server.py` 啟動，GPT 功能才可使用。
 
+若要同時使用完整市場模擬、消費者商城與後台，先執行 `npm ci --prefix simulator`，再改用：
+
+```bash
+python3 run_all.py
+```
+
+後台位於 `http://127.0.0.1:8000`，模擬商城位於 `http://127.0.0.1:5173`。完整每日閉環見 [MarketSimulator 整合說明](docs/SIMULATOR_INTEGRATION.md)。
+
 第一次進入「AI 店長」時，點選「連接 GPT」並輸入 OpenAI Platform API key。金鑰只會寫入本機 `.env`，該檔案已列入 `.gitignore`；也可以自行複製 `.env.example` 並填入：
 
 ```env
@@ -29,6 +37,7 @@ OPENAI_MODEL=gpt-4o-mini
 
 - 營運總覽與互動營收圖表
 - AI 店長每日摘要、可確認的決策建議與決策紀錄
+- MarketSimulator 動態競品、事件、AI 買家、成交、評論與逐日策略閉環
 - OpenAI Responses API 結構化營運分析
 - 只輸入名稱、成本、庫存、預警庫存與最低毛利率的 AI 商品建立流程
 - 訂單、商品與庫存、顧客、行銷活動管理
