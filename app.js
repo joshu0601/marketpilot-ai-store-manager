@@ -124,16 +124,16 @@ function orderTable(rows) {
 }
 
 function managerPage() {
-  return `${pageHead('AI STORE MANAGER','AI 店長','把每日市場訊號轉成可以理解、可以控制的營運決策。',`<button class="ghost-button ai-connect-button"><span class="connection-dot" id="aiConnection"></span><span id="aiConnectionText">檢查連線</span></button><button class="primary-button ai-run-button">${icon('play')} 使用 GPT 分析</button>`)}
-  <section class="manager-hero"><article class="card manager-main"><span class="manager-label" id="aiAnalysisLabel"><i></i>等待真實 GPT 分析</span><h1 id="aiSummary">正在準備市場分析</h1><p id="aiSummaryNote">系統會取得目前市場資料並交由已連接的 GPT 模型分析，不顯示預先填寫的結論。</p><div class="decision-metrics"><div><small>分析模型</small><strong id="analysisModel">—</strong></div><div><small>資料來源</small><strong id="analysisSource">—</strong></div><div><small>產生建議</small><strong id="analysisCount">—</strong></div></div><div class="manager-actions"><button class="primary-button apply-all" disabled>套用待確認建議</button><button class="ghost-button ai-run-button">重新分析</button></div></article>
+  return `${pageHead('AI STORE MANAGER','AI 店長','把每日市場訊號轉成可以理解、可以控制的營運決策。',`<button class="ghost-button ai-connect-button"><span class="connection-dot" id="aiConnection"></span><span id="aiConnectionText">檢查連線</span></button><button class="primary-button" disabled>${icon('spark')} 每日分析一次</button>`)}
+  <section class="manager-hero"><article class="card manager-main"><span class="manager-label" id="aiAnalysisLabel"><i></i>正在讀取今日分析</span><h1 id="aiSummary">正在準備市場分析</h1><p id="aiSummaryNote">系統每天只會呼叫 GPT 一次，分析完成後自動執行策略並留下紀錄。</p><div class="decision-metrics"><div><small>分析模型</small><strong id="analysisModel">—</strong></div><div><small>資料來源</small><strong id="analysisSource">—</strong></div><div><small>自動執行</small><strong id="analysisCount">—</strong></div></div><div class="manager-actions"><button class="primary-button" id="executionSummary" disabled>等待今日自動執行</button><button class="ghost-button" disabled>明日自動更新</button></div></article>
   <article class="card confidence-card"><h2>決策可信度</h2><div class="confidence-ring"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="51" fill="none" stroke="#edf0ec" stroke-width="9"/><circle id="confidenceProgress" cx="60" cy="60" r="51" fill="none" stroke="#2b7d60" stroke-width="9" stroke-linecap="round" stroke-dasharray="320" stroke-dashoffset="320"/></svg><div><strong id="confidenceValue">—</strong><small id="confidenceLabel">尚未分析</small></div></div><div class="confidence-note" id="aiMeta">完成後會顯示實際模型、回應時間與 token 用量。</div></article></section>
-  <div class="card-head"><div><h2>GPT 營運建議</h2><p>分析完成後可逐項檢視</p></div><span class="pill gray" id="recommendationCount">0 項</span></div>
-  <section class="recommendation-grid" id="recommendationGrid"><article class="card empty-state ai-empty"><span class="metric-icon">${icon('spark')}</span><h3>等待市場分析</h3><p>這裡只會顯示 GPT 本次實際產生的建議。</p></article></section>
-  <section class="dashboard-grid"><article class="card timeline-card"><div class="card-head"><div><h2>本次分析紀錄</h2><p>實際 GPT 呼叫結果</p></div></div><div class="timeline" id="decisionTimeline"><div class="empty-inline">尚未產生分析紀錄</div></div></article><article class="card context-card"><div class="card-head"><div><h2>市場資料</h2><p id="marketSourceLabel">等待資料來源</p></div><span class="status-pill" id="marketStatus"><i></i>尚未分析</span></div><div id="marketRows"><div class="empty-inline">完成 GPT 分析後顯示實際輸入資料</div></div></article></section>`;
+  <div class="card-head"><div><h2>今日執行紀錄</h2><p>AI 策略會自動套用，缺貨風險會通知賣家</p></div><span class="pill gray" id="recommendationCount">0 項</span></div>
+  <section class="recommendation-grid" id="recommendationGrid"><article class="card empty-state ai-empty"><span class="metric-icon">${icon('spark')}</span><h3>等待每日分析</h3><p>分析完成後會顯示實際執行與補貨通知。</p></article></section>
+  <section class="dashboard-grid"><article class="card timeline-card"><div class="card-head"><div><h2>自動執行時間軸</h2><p>今日實際套用與通知紀錄</p></div></div><div class="timeline" id="decisionTimeline"><div class="empty-inline">尚未產生執行紀錄</div></div></article><article class="card context-card"><div class="card-head"><div><h2>市場資料</h2><p id="marketSourceLabel">等待資料來源</p></div><span class="status-pill" id="marketStatus"><i></i>尚未分析</span></div><div id="marketRows"><div class="empty-inline">完成 GPT 分析後顯示實際輸入資料</div></div></article></section>`;
 }
 
-function recommendation(iconName,title,desc,from,to,impact) {
-  return `<article class="card recommendation"><div class="rec-top"><span class="rec-icon">${icon(iconName)}</span><span class="rec-impact">${impact}</span></div><h3>${title}</h3><p>${desc}</p><div class="rec-change"><b>${from}</b>${icon('arrow')}<span>${to}</span></div><div class="rec-actions"><button class="secondary-button apply-rec">套用建議</button><button class="ghost-button dismiss-rec">略過</button></div></article>`;
+function recommendation(iconName,title,to,result,status) {
+  return `<article class="card recommendation"><div class="rec-top"><span class="rec-icon">${icon(iconName)}</span><span class="rec-impact">執行紀錄</span></div><h3>${title}</h3><p>${status==='seller_notified'?'補貨通知內容':'AI 店長套用內容'}</p><div class="rec-change"><span>${to}</span></div><div class="execution-status ${status==='seller_notified'?'notified':''}"><span>${status==='seller_notified'?icon('bell'):icon('check')}</span><strong>${escapeHTML(result)}</strong></div></article>`;
 }
 
 function listPage(type) {
@@ -269,30 +269,44 @@ function openAISettings() {
 }
 
 function renderAIAnalysis(payload) {
-  const data=payload.analysis, meta=payload.meta, recommendations=data.recommendations || [];
+  const data=payload.analysis, meta=payload.meta, recommendations=data.recommendations || [], executions=payload.execution_records || [];
   if(!document.getElementById('aiSummary')) return;
+  const generatedAt=meta.generated_at?new Date(meta.generated_at):new Date();
+  const generatedLabel=generatedAt.toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
   document.getElementById('aiSummary').textContent=data.summary;
-  document.getElementById('aiAnalysisLabel').innerHTML=`<i></i>GPT 分析已完成 · ${new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})}`;
-  document.getElementById('aiSummaryNote').textContent='以下建議由目前商店資料產生。商品售價通過最低毛利防護後會自動執行，其他營運異動仍由你確認。';
+  document.getElementById('aiAnalysisLabel').innerHTML=`<i></i>${meta.cache_hit?'今日分析已保存':'今日 GPT 分析完成'} · ${generatedLabel}`;
+  document.getElementById('aiSummaryNote').textContent='此分析每天產生一次並保存至隔日。定價、廣告與促銷策略會自動套用；即將缺貨時會通知賣家補貨。';
   document.getElementById('confidenceValue').textContent=`${data.confidence}%`;
   document.getElementById('confidenceLabel').textContent=data.confidence>=80?'高可信':data.confidence>=60?'中等可信':'需審慎評估';
   document.getElementById('confidenceProgress').style.strokeDashoffset=String(320-(320*data.confidence/100));
-  document.getElementById('aiMeta').textContent=`${meta.model} · ${Number(meta.latency_ms).toLocaleString()} ms · ${Number(meta.input_tokens)+Number(meta.output_tokens)} tokens`;
-  document.getElementById('recommendationCount').textContent=`${recommendations.length} 項待處理`;
+  document.getElementById('aiMeta').textContent=`${meta.model} · ${Number(meta.latency_ms).toLocaleString()} ms · ${Number(meta.input_tokens)+Number(meta.output_tokens)} tokens${meta.cache_hit?' · 今日快取':''}`;
+  document.getElementById('recommendationCount').textContent=`${executions.length} 項已處理`;
   document.getElementById('analysisModel').textContent=meta.model;
   document.getElementById('analysisSource').textContent=meta.context_source==='external_environment'?'外部環境':meta.context_source==='api_request'?'API 資料':'商店資料';
-  document.getElementById('analysisCount').textContent=`${recommendations.length} 項`;
+  document.getElementById('analysisCount').textContent=`${executions.length} 項`;
+  const executionSummary=document.getElementById('executionSummary');if(executionSummary)executionSummary.textContent=`今日已自動處理 ${executions.length} 項`;
   const categoryIcons={advertising:'megaphone',inventory:'truck',pricing:'tag',promotion:'target',customer:'users'};
-  document.getElementById('recommendationGrid').innerHTML=recommendations.map(item=>recommendation(
+  document.getElementById('recommendationGrid').innerHTML=recommendations.map((item,index)=>recommendation(
     categoryIcons[item.category] || 'spark',
-    escapeHTML(item.title), escapeHTML(item.description), escapeHTML(item.current_value),
-    escapeHTML(item.suggested_value), escapeHTML(item.expected_impact)
+    escapeHTML(item.title), escapeHTML(item.suggested_value),
+    executions[index]?.result || '已自動套用', executions[index]?.status || 'applied'
   )).join('');
-  const applyAll=document.querySelector('.apply-all'); if(applyAll) applyAll.disabled=recommendations.length===0;
   renderMarketSnapshot(payload.market_snapshot || {}, data.market_status, meta.context_source);
   const timeline=document.getElementById('decisionTimeline');
-  if(timeline) timeline.innerHTML=`<div class="timeline-item"><div class="timeline-time">${new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})}</div><div class="timeline-line"><i></i></div><div class="timeline-copy"><strong>${escapeHTML(data.summary)}</strong><p>${escapeHTML(meta.model)} · ${recommendations.length} 項建議</p></div><span class="timeline-result">已完成</span></div>`;
-  bindRecommendationEvents();
+  if(timeline) timeline.innerHTML=executions.map(record=>`<div class="timeline-item"><div class="timeline-time">${new Date(record.executed_at).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})}</div><div class="timeline-line"><i></i></div><div class="timeline-copy"><strong>${escapeHTML(record.title)}</strong><p>${escapeHTML(record.result)}</p></div><span class="timeline-result">${record.status==='seller_notified'?'已通知':'已套用'}</span></div>`).join('') || '<div class="empty-inline">今日沒有需要執行的策略</div>';
+  updateSellerNotifications(executions);
+}
+
+function updateSellerNotifications(executions) {
+  const notices=executions.filter(item=>item.status==='seller_notified');
+  const button=document.querySelector('.notification');
+  if(!button) return;
+  button.title=notices.length?`${notices.length} 則補貨通知`:'目前沒有補貨通知';
+  button.onclick=()=>{
+    openModal(`<h2>補貨通知</h2><p>${notices.length?'AI 店長依今日庫存風險通知你處理以下商品。':'目前沒有商品即將缺貨。'}</p><div class="search-results">${notices.map(item=>`<div class="search-result"><span>${icon('truck')}</span><div><strong>${escapeHTML(item.title)}</strong><small>${escapeHTML(item.notification || '請確認補貨數量')}</small></div></div>`).join('')}</div><div class="modal-footer"><button class="primary-button modal-cancel">知道了</button></div>`);
+    modalContent.querySelector('.modal-cancel').onclick=closeModal;
+  };
+  if(notices.length) button.classList.add('has-notice'); else button.classList.remove('has-notice');
 }
 
 function renderMarketSnapshot(snapshot, status, source) {
@@ -326,7 +340,6 @@ function renderAIError(message) {
   document.getElementById('analysisModel').textContent='—';
   document.getElementById('analysisSource').textContent='—';
   document.getElementById('analysisCount').textContent='0 項';
-  const applyAll=document.querySelector('.apply-all');if(applyAll)applyAll.disabled=true;
   document.getElementById('recommendationGrid').innerHTML=`<article class="card empty-state ai-empty"><span class="metric-icon">${icon('spark')}</span><h3>沒有預填建議</h3><p>${escapeHTML(message)}</p></article>`;
 }
 
@@ -337,33 +350,29 @@ async function runGPTAnalysis(button, knownStatus=null) {
   if(status.unavailable){showToast('請先執行 python3 server.py，再從 http://localhost:8000 開啟');return;}
   if(!status.configured){renderAIError('請先連接 OpenAI API，系統不會顯示範例分析。');if(button)openAISettings();return;}
   aiAnalysisInFlight=true;
-  const buttons=[...document.querySelectorAll('.ai-run-button')];
-  buttons.forEach(b=>{b.disabled=true;b.dataset.label=b.innerHTML;b.innerHTML='<span class="spinner"></span> GPT 分析中';});
+  document.getElementById('aiAnalysisLabel').innerHTML='<i></i>GPT 正在產生今日分析';
   try {
     const result=await api('/api/ai/analyze',{method:'POST',body:JSON.stringify({})});
-    renderAIAnalysis(result); showToast('GPT 已完成今日營運分析');
+    renderAIAnalysis(result); showToast(result.meta?.cache_hit?'已載入今日市場分析':'GPT 已完成今日營運分析');
   } catch(error) { renderAIError(error.message);showToast(error.message); }
-  finally { aiAnalysisInFlight=false;buttons.forEach(b=>{b.disabled=false;b.innerHTML=b.dataset.label || '重新分析';}); }
+  finally { aiAnalysisInFlight=false; }
 }
 
 async function initializeAIManager() {
   const status=await loadAIStatus();
-  if(status.configured) await runGPTAnalysis(null,status);
-  else renderAIError(status.unavailable?'請由 server.py 啟動 MarketPilot。':'請先連接 OpenAI API，系統不會顯示範例分析。');
-}
-
-function bindRecommendationEvents() {
-  document.querySelectorAll('.apply-rec').forEach(b=>b.onclick=()=>{b.closest('.recommendation').style.opacity='.45';b.textContent='已套用';b.disabled=true;showToast('建議已加入今日執行清單');});
-  document.querySelectorAll('.dismiss-rec').forEach(b=>b.onclick=()=>{b.closest('.recommendation').remove();showToast('已略過這項建議');});
+  if(!status.configured){renderAIError(status.unavailable?'請由 server.py 啟動 MarketPilot。':'請先連接 OpenAI API，系統不會顯示範例分析。');return;}
+  try {
+    const today=await api('/api/ai/analysis/today');
+    if(today.available) renderAIAnalysis(today);
+    else await runGPTAnalysis(null,status);
+  } catch(error) { renderAIError(error.message); }
 }
 
 function bindPageEvents() {
   document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>navigate(b.dataset.go));
   document.querySelectorAll('.chart-range button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.chart-range button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.getElementById('salesChart').innerHTML=lineChart(salesData[b.dataset.range]);});
-  bindRecommendationEvents();
   document.querySelectorAll('.ai-connect-button').forEach(b=>b.onclick=openAISettings);
   document.querySelectorAll('.ai-run-button').forEach(b=>b.onclick=e=>runGPTAnalysis(e.currentTarget));
-  const all=document.querySelector('.apply-all'); if(all) all.onclick=()=>{document.querySelectorAll('.apply-rec').forEach(b=>b.click()); showToast('3 項建議已全部套用');};
   const dismiss=document.querySelector('.dismiss-brief'); if(dismiss) dismiss.onclick=()=>{dismiss.closest('.briefing').style.opacity='.55';showToast('提醒已移到稍後處理');};
   document.querySelectorAll('.open-create').forEach(b=>b.onclick=()=>createModal(b.textContent.trim().replace('＋ ','')));
   document.querySelectorAll('.save-settings').forEach(b=>b.onclick=()=>showToast('商店設定已儲存'));

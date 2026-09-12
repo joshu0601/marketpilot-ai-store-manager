@@ -226,6 +226,9 @@ td { padding: 12px 14px; border-top: 1px solid var(--line); font-size: 10.5px; }
 .rec-change span { color: var(--green); font-weight: 700; }
 .rec-actions { display: flex; gap: 7px; }
 .rec-actions button { flex: 1; min-height: 32px; }
+.execution-status { display: flex; align-items: center; gap: 7px; min-height: 34px; padding: 8px 10px; border-radius: 8px; color: var(--green); background: #edf7f2; font-size: 10px; }
+.execution-status svg { width: 14px; height: 14px; }
+.execution-status.notified { color: #a45c2d; background: #fff4e9; }
 .timeline-card { grid-column: span 7; padding: 20px; }
 .context-card { grid-column: span 5; padding: 20px; }
 .timeline { display: grid; }

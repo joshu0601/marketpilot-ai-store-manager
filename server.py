@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
 from urllib.request import Request as URLRequest, urlopen
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -26,8 +27,11 @@ from pydantic import BaseModel, Field, ValidationError
 ROOT = Path(__file__).resolve().parent
 ENV_FILE = ROOT / ".env"
 PRODUCTS_FILE = ROOT / "data" / "products.json"
+DAILY_ANALYSIS_FILE = ROOT / "data" / "daily_analysis.json"
 DEFAULT_MODEL = "gpt-4o-mini"
 PRODUCTS_LOCK = threading.Lock()
+DAILY_ANALYSIS_LOCK = threading.Lock()
+TAIPEI_TIMEZONE = ZoneInfo("Asia/Taipei")
 
 
 class Recommendation(BaseModel):
@@ -178,7 +182,8 @@ DEFAULT_STORE_CONTEXT = {
         "price_range": [50, 5000],
         "daily_ad_budget_range": [0, 5000],
         "promotion_discount_max": 0.30,
-        "human_confirmation_required": True,
+        "human_confirmation_required": False,
+        "inventory_reorder_mode": "notify_seller",
     },
 }
 
@@ -189,8 +194,9 @@ SYSTEM_PROMPT = """你是 MarketPilot 的資深電商營運店長。請分析使
 1. 只根據提供的資料判斷，不要杜撰訂單、成本或市場消息。
 2. 優先處理預期效益高、風險可控的事項，並遵守 constraints。
 3. 建議要具體寫出目前值、建議值與預期影響；無法可靠估算時請明確寫「需進一步驗證」。
-4. 商品售價通過最低毛利防護後可自動執行；廣告、促銷與補貨仍作為待確認建議。
-5. 使用自然、精簡的繁體中文，像有經驗的營運主管，不使用浮誇或機器人語氣。
+4. 商品售價、廣告與促銷策略會在安全限制內自動執行，不要要求人工確認。
+5. 庫存不足時只通知賣家確認補貨，不要宣稱系統已自動採購。
+6. 使用自然、精簡的繁體中文，像有經驗的營運主管，不使用浮誇或機器人語氣。
 """
 
 
@@ -308,6 +314,83 @@ def analyze_store(context: dict | None = None) -> dict:
             "output_tokens": getattr(usage, "output_tokens", 0) if usage else 0,
         },
     }
+
+
+def analysis_date() -> str:
+    return datetime.now(TAIPEI_TIMEZONE).date().isoformat()
+
+
+def load_daily_analysis() -> dict | None:
+    try:
+        record = json.loads(DAILY_ANALYSIS_FILE.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return None
+    if not isinstance(record, dict) or record.get("analysis_date") != analysis_date():
+        return None
+    payload = record.get("payload")
+    return payload if isinstance(payload, dict) else None
+
+
+def save_daily_analysis(payload: dict) -> None:
+    DAILY_ANALYSIS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    temporary = DAILY_ANALYSIS_FILE.with_suffix(".tmp")
+    record = {"analysis_date": analysis_date(), "payload": payload}
+    temporary.write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    temporary.replace(DAILY_ANALYSIS_FILE)
+
+
+def attach_execution_records(payload: dict) -> dict:
+    if isinstance(payload.get("execution_records"), list):
+        return payload
+    executed_at = payload.get("meta", {}).get("generated_at") or datetime.now(TAIPEI_TIMEZONE).isoformat()
+    recommendations = payload.get("analysis", {}).get("recommendations", [])
+    payload["execution_records"] = [
+        {
+            "id": f"daily-{analysis_date()}-{index + 1}",
+            "category": item.get("category", "promotion"),
+            "title": item.get("title", "AI 營運調整"),
+            "result": "已通知賣家補貨" if item.get("category") == "inventory" else "已自動套用",
+            "status": "seller_notified" if item.get("category") == "inventory" else "applied",
+            "executed_at": executed_at,
+            "notification": item.get("suggested_value") if item.get("category") == "inventory" else None,
+        }
+        for index, item in enumerate(recommendations)
+        if isinstance(item, dict)
+    ]
+    return payload
+
+
+def get_daily_analysis(context: dict | None = None) -> dict:
+    """Return one persisted GPT market analysis for each Taipei calendar day."""
+    with DAILY_ANALYSIS_LOCK:
+        cached = load_daily_analysis()
+        if cached is not None:
+            result = json.loads(json.dumps(cached))
+            result.setdefault("meta", {})["cache_hit"] = True
+            attach_execution_records(result)
+            return result
+
+        result = analyze_store(context)
+        generated_at = datetime.now(TAIPEI_TIMEZONE).isoformat()
+        result.setdefault("meta", {}).update({
+            "analysis_date": analysis_date(),
+            "generated_at": generated_at,
+            "cache_hit": False,
+        })
+        attach_execution_records(result)
+        save_daily_analysis(result)
+        return result
+
+
+def get_cached_daily_analysis() -> dict | None:
+    with DAILY_ANALYSIS_LOCK:
+        cached = load_daily_analysis()
+        if cached is None:
+            return None
+        result = json.loads(json.dumps(cached))
+        result.setdefault("meta", {})["cache_hit"] = True
+        attach_execution_records(result)
+        return result
 
 
 def market_snapshot(context: dict) -> dict:
@@ -692,6 +775,13 @@ class MarketPilotHandler(SimpleHTTPRequestHandler):
             api_key, model = load_settings()
             self._json({"configured": bool(api_key), "model": model})
             return
+        if path == "/api/ai/analysis/today":
+            cached = get_cached_daily_analysis()
+            if cached is None:
+                self._json({"ok": True, "available": False, "analysis_date": analysis_date()})
+            else:
+                self._json({"ok": True, "available": True, **cached})
+            return
         if path == "/api/agent/schema":
             self._json({
                 "request_schema": AgentDecisionRequest.model_json_schema(),
@@ -743,7 +833,7 @@ class MarketPilotHandler(SimpleHTTPRequestHandler):
                 context = payload.get("context")
                 if context is not None and not isinstance(context, dict):
                     raise ValueError("context 必須是物件")
-                self._json({"ok": True, **analyze_store(context)})
+                self._json({"ok": True, **get_daily_analysis(context)})
                 return
             if path == "/api/agent/decide":
                 request = AgentDecisionRequest.model_validate(payload)

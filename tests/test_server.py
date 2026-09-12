@@ -172,6 +172,25 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(result["meta"]["output_tokens"], 80)
         self.assertEqual(result["meta"]["context_source"], "demo_store_data")
 
+    def test_daily_analysis_calls_gpt_only_once_and_survives_reload(self):
+        generated = {
+            "analysis": FakeResponse.output_parsed.model_dump(),
+            "market_snapshot": {},
+            "meta": {"model": "gpt-4o-mini", "latency_ms": 10, "input_tokens": 1, "output_tokens": 2},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "daily_analysis.json"
+            with patch.object(server, "DAILY_ANALYSIS_FILE", target), patch.object(server, "analyze_store", return_value=generated) as analyze:
+                first = server.get_daily_analysis()
+                second = server.get_daily_analysis()
+                reloaded = server.get_cached_daily_analysis()
+        analyze.assert_called_once_with(None)
+        self.assertFalse(first["meta"]["cache_hit"])
+        self.assertTrue(second["meta"]["cache_hit"])
+        self.assertTrue(reloaded["meta"]["cache_hit"])
+        self.assertEqual(first["meta"]["generated_at"], second["meta"]["generated_at"])
+        self.assertEqual(first["execution_records"][0]["status"], "seller_notified")
+        self.assertEqual(first["execution_records"][0]["result"], "已通知賣家補貨")
     def test_market_analysis_uses_external_environment_when_configured(self):
         request = self.make_request()
         with (
