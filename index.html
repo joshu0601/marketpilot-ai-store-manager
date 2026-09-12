@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="MarketPilot AI 店長電商營運後台" />
+  <title>MarketPilot — 商店營運中心</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div><strong>MarketPilot</strong><small>商店營運中心</small></div>
+      </div>
+
+      <div class="store-switcher">
+        <div class="store-avatar">森</div>
+        <div class="store-copy"><strong>森日選物</strong><small><i></i> 商店營運中</small></div>
+        <button class="icon-button bare" aria-label="切換商店">⌄</button>
+      </div>
+
+      <nav class="main-nav" aria-label="主要導覽">
+        <button class="nav-item active" data-page="overview"><span data-icon="grid"></span>營運總覽</button>
+        <button class="nav-item nav-ai" data-page="manager"><span data-icon="spark"></span>AI 店長<span class="nav-badge">即時</span></button>
+        <div class="nav-label">商店管理</div>
+        <button class="nav-item" data-page="orders"><span data-icon="bag"></span>訂單管理<span class="nav-count">12</span></button>
+        <button class="nav-item" data-page="products"><span data-icon="box"></span>商品與庫存</button>
+        <button class="nav-item" data-page="customers"><span data-icon="users"></span>顧客</button>
+        <button class="nav-item" data-page="marketing"><span data-icon="megaphone"></span>行銷活動</button>
+        <div class="nav-label">洞察</div>
+        <button class="nav-item" data-page="analytics"><span data-icon="chart"></span>營運分析</button>
+        <button class="nav-item" data-page="experiments"><span data-icon="flask"></span>策略評測</button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="capacity-row"><span>本月方案用量</span><strong>68%</strong></div>
+        <div class="capacity-bar"><i></i></div>
+        <button class="nav-item" data-page="settings"><span data-icon="settings"></span>商店設定</button>
+        <div class="profile">
+          <div class="profile-avatar">JL</div>
+          <div><strong>Joshua Lin</strong><small>品牌管理員</small></div>
+          <button class="icon-button bare">•••</button>
+        </div>
+      </div>
+    </aside>
+
+    <div class="main-column">
+      <header class="topbar">
+        <button class="mobile-menu icon-button" id="menuBtn" aria-label="開啟選單"><span data-icon="menu"></span></button>
+        <div class="breadcrumb"><span>森日選物</span><b>/</b><strong id="pageCrumb">營運總覽</strong></div>
+        <div class="top-actions">
+          <button class="search-button" id="searchBtn"><span data-icon="search"></span><span>搜尋訂單、商品或顧客</span><kbd>⌘ K</kbd></button>
+          <button class="icon-button notification" aria-label="通知"><span data-icon="bell"></span><i></i></button>
+          <button class="primary-button compact" id="quickAction"><span>＋</span> 新增商品</button>
+        </div>
+      </header>
+      <main id="app" tabindex="-1"></main>
+    </div>
+  </div>
+
+  <div class="toast-stack" id="toastStack" aria-live="polite"></div>
+  <div class="modal-backdrop" id="modalBackdrop" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <button class="modal-close icon-button" id="modalClose" aria-label="關閉">×</button>
+      <div id="modalContent"></div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

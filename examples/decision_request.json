@@ -1,0 +1,58 @@
+{
+  "request_id": "simulation-42-day-18",
+  "observation_date": "2026-09-11",
+  "sku": "SKU-001",
+  "sales": {
+    "price": 100,
+    "unit_cost": 55,
+    "units_sold": 86,
+    "revenue": 8170,
+    "gross_profit": 3440,
+    "traffic": 2410,
+    "conversion_rate": 0.0357,
+    "lost_sales": 9,
+    "ad_budget": 1000,
+    "ad_spend": 960,
+    "coupon_discount": 0.05,
+    "promotion_level": 0.2
+  },
+  "market": {
+    "competitor_price": 94,
+    "demand_index": 1.18,
+    "competitor_promotion_level": 0.35
+  },
+  "inventory": {
+    "on_hand": 420,
+    "in_transit": 180,
+    "lead_time_days": 7
+  },
+  "events": [
+    {
+      "type": "competitor_discount",
+      "severity": 0.7,
+      "description": "主要競品進行三日限時折扣"
+    }
+  ],
+  "history_7d": [],
+  "last_action": {
+    "price": 100,
+    "ad_budget": 1000,
+    "coupon_discount": 0.05,
+    "reorder_quantity": 0,
+    "promotion_level": 0.2
+  },
+  "constraints": {
+    "target_gross_margin": 0.35,
+    "price_min": 70,
+    "price_max": 150,
+    "max_price_change_pct": 0.1,
+    "ad_budget_min": 0,
+    "ad_budget_max": 5000,
+    "max_ad_budget_change_pct": 0.25,
+    "coupon_discount_max": 0.2,
+    "reorder_quantity_max": 1000,
+    "promotion_level_max": 1,
+    "safety_stock_days": 7,
+    "target_stock_days": 14
+  }
+}
