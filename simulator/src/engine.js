@@ -23,7 +23,7 @@ function seeded(seed) { let value=(Number(seed)||1)>>>0; return () => { value=(v
 function demandFactor(state, product) { return state.events.filter(event => state.day>=event.start_day && state.day<event.start_day+event.duration).reduce((factor,event) => !event.category || event.category===product.category ? factor*event.effect : factor, 1); }
 function purchaseScore(buyer, product, listing, random) { const preference=buyer.likes.includes(product.category)?.22:0; const affordable=Math.min(1.25,(product.cost*buyer.budget*1.7)/listing.price); return product.quality*1.05+affordable*.7+preference+(random()-.5)*.28; }
 
-export function createState(seed=12345) { return {day:0,seed:Number(seed),catalog:[],listings:[],logs:['商品目錄會與 MarketPilot 後台自動同步。'],events:[],history:[],dailyResults:[],dailyHistory:[],pendingActions:[]}; }
+export function createState(seed=12345) { return {day:0,seed:Number(seed),catalog:[],listings:[],logs:['商品目錄會與 MarketPilot 後台自動同步。'],events:[],history:[],dailyResults:[],dailyHistory:[],pendingActions:[],orders:[],agentHistory:[]}; }
 
 export function metrics(state) {
   const mine=state.listings.filter(item=>item.seller==='pilot'),market=state.listings.reduce((total,item)=>total+item.unitsSold,0),units=mine.reduce((total,item)=>total+item.unitsSold,0);
@@ -66,18 +66,53 @@ export function syncProducts(state,inputs) {
 
 function applyPurchase(state,listing,buyer,review,logs) {
   if(!listing||listing.inventory<1)return false;const product=stateInfo(state)[listing.productId];listing.inventory--;listing.unitsSold++;
-  const effectivePrice=listing.price*(1-(listing.couponDiscount||0));listing.revenue+=effectivePrice;listing.profit+=effectivePrice-product.cost;
+  const effectivePrice=Number((listing.price*(1-(listing.couponDiscount||0))).toFixed(2));state.orders ||= [];state.orders.push({id:`ORD-${state.day}-${state.orders.length+1}`,day:state.day,buyer:buyer.name,productId:product.id,productName:product.name,seller:listing.seller,listingId:listing.id,quantity:1,unitPrice:effectivePrice,total:effectivePrice,unitCost:product.cost,status:'completed'});listing.revenue+=effectivePrice;listing.profit+=effectivePrice-product.cost;
   if(review){const score=Math.max(1,Math.min(5,Number(review.score)||4));listing.rating=(listing.rating*listing.reviews+score)/(listing.reviews+1);listing.reviews++;listing.reviewItems=[{id:`${state.day}-${listing.id}-${listing.reviews}`,buyer:buyer.name,emoji:buyer.emoji,score,text:String(review.text||'').slice(0,160),day:state.day},...(listing.reviewItems||[])].slice(0,8);}
   if(listing.seller==='pilot')logs.push(`${buyer.name} 購買了 ${listing.price} 元的「${product.name}」`);return true;
 }
 
 export function step(oldState,buyerDecisions=null) {
   const state=structuredClone(oldState),products=stateInfo(state),random=seeded(state.seed+state.day*7919),before=new Map(state.listings.map(item=>[item.id,{unitsSold:item.unitsSold,revenue:item.revenue,profit:item.profit}]));state.day++;const logs=[`Day ${state.day}`];
-  if(random()<=.31){const choices=[{name:'🔥 市場需求暴增',effect:1.3,duration:2},{name:'📉 市場需求下降',effect:.7,duration:2},{name:'🛍️ 購物節',effect:1.45,duration:1}],event={...choices[Math.floor(random()*choices.length)],event_id:`E${state.day}`,start_day:state.day};state.events.push(event);logs.push(`${event.name}｜需求 ${event.effect>1?'+':'-'}${Math.round(Math.abs(event.effect-1)*100)}%`);}
-  state.listings.filter(listing=>listing.seller!=='pilot').forEach(listing=>{const pilot=state.listings.find(item=>item.seller==='pilot'&&item.productId===listing.productId);if(pilot&&random()<.38){const target=Math.max(products[listing.productId].cost+1,Math.round(pilot.price*(.94+random()*.08)));if(target!==listing.price){listing.price=target;logs.push(`${sellers[listing.seller]} 調整「${products[listing.productId].name}」價格為 NT$${target}`);}}if(listing.inventory<20&&random()<.7){listing.inventory+=60;listing.restocked+=60;}});
-  for(const action of state.pendingActions){const product=products[action.productId];let listing=state.listings.find(item=>item.seller==='pilot'&&item.productId===action.productId);if(action.type==='list_product'){listing=listingBase('pilot',action.productId,Number(action.price),Number(action.initial_inventory));state.listings.push(listing);}else if(action.type==='update_price')listing.price=Number(action.price);else if(action.type==='update_strategy'){listing.couponDiscount=Number(action.coupon_discount);listing.promotionLevel=Number(action.promotion_level);}else if(action.type==='restock'){listing.inventory+=Number(action.quantity);listing.restocked+=Number(action.quantity);}else state.listings=state.listings.filter(item=>item!==listing);logs.push(`MarketPilot 執行：${action.type} ${product.name}`);}state.pendingActions=[];
+  applyPendingActions(state);
   if(Array.isArray(buyerDecisions)){const buyerByName=new Map(buyers.map(buyer=>[buyer.name,buyer])),processed=new Set();for(const decision of buyerDecisions){const buyer=buyerByName.get(decision?.buyer),listing=state.listings.find(item=>item.id===decision?.listingId);if(!buyer||processed.has(buyer.name))continue;processed.add(buyer.name);if(listing&&decision.buy===true)applyPurchase(state,listing,buyer,decision.review,logs);}logs.push(`OpenAI 買家完成 ${processed.size} 個購買決策`);}else{for(const listing of state.listings){if(!listing.inventory)continue;const product=products[listing.productId],effectivePrice=listing.price*(1-(listing.couponDiscount||0)),promotionFactor=1+(listing.promotionLevel||0)*.35,base=13*Math.max(.15,1.75-effectivePrice/(product.cost*1.55))*(.65+product.quality*.55)*(.65+listing.rating/5*.55)*demandFactor(state,product)*promotionFactor*(.65+random()*.7),sold=Math.min(listing.inventory,Array.from({length:Math.max(0,Math.round(base))},()=>purchaseScore(buyers[Math.floor(random()*buyers.length)],product,{...listing,price:effectivePrice},random)).filter(score=>score>=1.28+random()*.18).length);listing.inventory-=sold;listing.unitsSold+=sold;listing.revenue+=sold*effectivePrice;listing.profit+=sold*(effectivePrice-product.cost);if(listing.seller==='pilot'&&sold)logs.push(`MarketPilot 售出 ${sold} 件「${product.name}」`);}}
   state.dailyResults=state.listings.map(listing=>{const previous=before.get(listing.id)||{unitsSold:0,revenue:0,profit:0};return {day:state.day,listingId:listing.id,productId:listing.productId,seller:listing.seller,price:listing.price,unitCost:products[listing.productId].cost,unitsSold:listing.unitsSold-previous.unitsSold,revenue:listing.revenue-previous.revenue,grossProfit:listing.profit-previous.profit,inventory:listing.inventory,couponDiscount:listing.couponDiscount||0,promotionLevel:listing.promotionLevel||0,rating:listing.rating};});state.dailyHistory=[...(state.dailyHistory||[]),{day:state.day,results:state.dailyResults}].slice(-7);state.events=state.events.filter(event=>state.day<event.start_day+event.duration);state.history.push({day:state.day,...metrics(state)});state.logs=[...logs,...state.logs].slice(0,80);return state;
 }
 
 export function publicState(state){return {...structuredClone(state),catalog:structuredClone(stateCatalog(state)),sellers,metrics:metrics(state)};}
+
+export function prepareMarket(oldState) {
+  const state=structuredClone(oldState),random=seeded(state.seed+state.day*7919),logs=[];
+  state.day++;
+  state.events=state.events.filter(event=>state.day<event.start_day+event.duration);
+  if(random()<=.31){const choices=[{name:'🔥 市場需求暴增',effect:1.3,duration:2},{name:'📉 市場需求下降',effect:.7,duration:2},{name:'🛍️ 購物節',effect:1.45,duration:1}],event={...choices[Math.floor(random()*choices.length)],event_id:`E${state.day}`,start_day:state.day};state.events.push(event);logs.push(`${event.name}｜需求 ${event.effect>1?'+':'-'}${Math.round(Math.abs(event.effect-1)*100)}%`);}
+
+  state.day--;
+  state.logs=[...logs,...state.logs].slice(0,80);
+  return state;
+}
+
+export function applyCompetitorDecisions(oldState, decisions) {
+  const state=structuredClone(oldState),expected=state.listings.filter(item=>item.seller!=='pilot');
+  if(!Array.isArray(decisions)||decisions.length!==expected.length||new Set(decisions.map(item=>item.listingId)).size!==expected.length)throw new Error('競品決策必須涵蓋每個競品且不得重複');
+  const records=decisions.map(decision=>{
+    const listing=expected.find(item=>item.id===decision.listingId);
+    if(!listing||!Number.isFinite(decision.price)||decision.price<=0||typeof decision.reason!=='string'||!decision.reason.trim())throw new Error('競品決策格式不正確');
+    const previousPrice=listing.price;listing.price=Math.max(.01,Math.round(decision.price*100)/100);
+    return {listingId:listing.id,productId:listing.productId,seller:listing.seller,previousPrice,price:listing.price,reason:decision.reason};
+  });
+  state.competitorDecisions=records;
+  state.logs=[...records.map(item=>`${sellers[item.seller]} 定價 NT$${item.price}：${item.reason}`),...state.logs].slice(0,80);
+  return state;
+}
+
+export function applyPendingActions(state) {
+  const products=stateInfo(state),logs=[];
+  for(const action of state.pendingActions){const product=products[action.productId];let listing=state.listings.find(item=>item.seller==='pilot'&&item.productId===action.productId);if(action.type==='list_product'){listing=listingBase('pilot',action.productId,Number(action.price),Number(action.initial_inventory));state.listings.push(listing);}else if(action.type==='update_price')listing.price=Number(action.price);else if(action.type==='update_strategy'){listing.couponDiscount=Number(action.coupon_discount);listing.promotionLevel=Number(action.promotion_level);}else if(action.type==='restock'){listing.inventory+=Number(action.quantity);listing.restocked+=Number(action.quantity);}else state.listings=state.listings.filter(item=>item!==listing);logs.push(`MarketPilot 執行：${action.type} ${product.name}`);}state.pendingActions=[];
+
+  for(const listing of state.listings.filter(item=>item.seller==='pilot')){
+    const product=products[listing.productId],effective=Number((listing.price*(1-(listing.couponDiscount||0))).toFixed(2));
+    if(effective<=0||(effective-product.cost)/effective+1e-9<product.minGrossMargin)throw new Error('成交價不符合商品最低毛利率');
+  }
+  state.logs=[...logs,...state.logs].slice(0,80);
+  return state;
+}

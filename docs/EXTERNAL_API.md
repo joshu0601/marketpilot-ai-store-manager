@@ -103,3 +103,5 @@ MarketPilot 會向設定的 URL 發出 `GET`、驗證 Observation，然後回傳
 6. 下一次呼叫把這筆 Action 放入 `last_action`。
 
 請使用唯一的 `request_id`，例如 `seed-42-day-18`，方便外部環境把日誌和決策對齊。
+
+每日決策支援選填 `current_unit_cost`，用於成本已更新但 `sales.unit_cost` 仍代表昨日成交成本的情境。競品價格使用最低可售競品的折後有效價格。`notifications` 會回傳低於毛利底線的競品通知；`observation` 保存原始決策依據。

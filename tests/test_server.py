@@ -346,17 +346,98 @@ class ServerTests(unittest.TestCase):
             "decision": {"summary": "降低價格並增加促銷", "confidence": 80, "reasons": {"price": "接近競品", "inventory": "低於安全庫存", "promotion": "提升轉換"}},
             "meta": {"source": "ai", "model": "gpt-4o-mini"}, "guardrails": {"applied": [], "margin": {}},
         }
-        next_state = {**state, "day": 2}
+        next_state = {**state, "day": 2, "lastAgentRun": {"seller_notifications": [{"quantity": 40}]}}
         with (
             patch.object(server, "sync_products_to_simulator", return_value=state),
-            patch.object(server, "simulator_request", side_effect=[{"accepted": []}, next_state]) as request,
+            patch.object(server, "simulator_request", side_effect=[{"state": state, "token": "test-token"}, next_state]) as request,
             patch.object(server, "decide_all_products", return_value={"decisions": [decision], "all_sources_ai": True}),
             patch.object(server, "save_simulator_run"),
         ):
             result = server.run_simulator_day()
-        queued = request.call_args_list[0].args[2]["actions"]
+        queued = request.call_args_list[1].args[2]["actions"]
         self.assertEqual([item["type"] for item in queued], ["update_price", "update_strategy"])
         self.assertEqual(result["agent_run"]["seller_notifications"][0]["quantity"], 40)
+    def test_safe_competitor_price_is_matched_even_outside_daily_change_limit(self):
+        request = self.make_request(price_max=300)
+        request.sales.price = 200
+        request.market.competitor_price = 120
+        action, applied, margin = server.apply_guardrails(server.fallback_proposal(request), request)
+        self.assertEqual(action.price, 120)
+        self.assertIn("competitive_price_match", applied)
+        self.assertGreaterEqual(margin["projected"], .3)
+
+    def test_below_floor_competitor_holds_price_and_notifies(self):
+        request = self.make_request(price_max=300)
+        request.sales.price = 150
+        request.market.competitor_price = 99.99
+        with patch.object(server, "load_settings", return_value=(None, "test")):
+            result = server.decide_action(request)
+        self.assertEqual(result["action"]["price"], 150)
+        self.assertEqual(result["notifications"][0]["type"], "competitor_below_margin")
+        self.assertIn("暫不跟價", result["decision"]["reasons"]["price"])
+
+    def test_exact_margin_boundary_allows_price_matching(self):
+        request = self.make_request(price_max=300)
+        request.sales.price = 150
+        request.market.competitor_price = 100
+        action, applied, margin = server.apply_guardrails(server.fallback_proposal(request), request)
+        self.assertEqual(action.price, 100)
+        self.assertEqual(margin["projected"], .3)
+        self.assertNotIn("competitor_below_margin_hold", applied)
+
+    def test_daily_decision_uses_new_cost_but_preserves_yesterday_sales(self):
+        state = self.simulator_state()
+        state["catalog"][0]["cost"] = 400
+        item = server.simulator_batch(state).observations[0]
+        self.assertEqual(item.sales.unit_cost, 300)
+        self.assertEqual(item.current_unit_cost, 400)
+        action, _, margin = server.apply_guardrails(server.fallback_proposal(item), item)
+        self.assertGreaterEqual(action.price, 666.67)
+        self.assertGreaterEqual(margin["projected"], .4)
+
+    def test_cold_start_and_new_products_are_included(self):
+        state = self.simulator_state()
+        state.update(day=0, dailyResults=[])
+        item = server.simulator_batch(state).observations[0]
+        self.assertEqual(item.sales.units_sold, 0)
+        self.assertEqual(item.observation_date, "simulation-day-0000")
+
+    def test_failed_manager_does_not_commit_market_day(self):
+        state = self.simulator_state()
+        with patch.object(server, "sync_products_to_simulator", return_value=state), patch.object(server, "simulator_request", return_value={"state": state,"token":"t"}) as request, patch.object(server, "decide_all_products", side_effect=RuntimeError("GPT failed")):
+            with self.assertRaisesRegex(RuntimeError, "GPT failed"):
+                server.run_simulator_day(1)
+        self.assertEqual(request.call_count, 1)
+        self.assertEqual(request.call_args.args[0], "/api/prepare-day")
+
+    def test_duplicate_day_is_rejected_before_calling_agents(self):
+        with patch.object(server, "sync_products_to_simulator", return_value=self.simulator_state()), patch.object(server, "simulator_request") as request:
+            with self.assertRaisesRegex(ValueError, "日期已變更"):
+                server.run_simulator_day(0)
+        request.assert_not_called()
+
+    def test_cost_update_reprices_immediately_without_creating_product(self):
+        product = {"id":"id-1","sku":"P001","name":"測試衣服","unit_cost":300,"inventory":8,"low_stock_threshold":2,"min_gross_margin":.4,"price":500}
+        with tempfile.TemporaryDirectory() as directory, patch.object(server, "PRODUCTS_FILE", Path(directory)/"products.json"), patch.object(server, "sync_products_to_simulator", return_value=self.simulator_state()), patch.object(server, "simulator_request") as simulator, patch.object(server, "load_settings", return_value=("test", "gpt-4o-mini")), patch.object(server, "OpenAI", FakePricingOpenAI):
+            server.persist_product(product)
+            result = server.update_product_cost("id-1", 600)
+            saved = server.load_products()
+        self.assertEqual(len(saved), 1)
+        self.assertEqual(result["id"], "id-1")
+        self.assertEqual(result["price"], 1000)
+        self.assertEqual(result["unit_cost"], 600)
+        self.assertTrue(simulator.call_args.args[2]["reprice"])
+        self.assertEqual(simulator.call_args.args[2]["price"], 1000)
+
+    def test_cost_update_failure_preserves_existing_cost_and_price(self):
+        product = {"id":"id-1","sku":"P001","name":"測試衣服","unit_cost":300,"inventory":8,"min_gross_margin":.4,"price":500}
+        with tempfile.TemporaryDirectory() as directory, patch.object(server, "PRODUCTS_FILE", Path(directory)/"products.json"), patch.object(server, "sync_products_to_simulator", return_value=self.simulator_state()), patch.object(server, "create_product_with_ai", side_effect=RuntimeError("GPT failed")), patch.object(server, "simulator_request") as simulator:
+            server.persist_product(product)
+            with self.assertRaisesRegex(RuntimeError, "GPT failed"):
+                server.update_product_cost("id-1", 600)
+            self.assertEqual(server.load_products(), [product])
+        simulator.assert_not_called()
+
     def test_daily_batch_refuses_non_ai_fallback(self):
         batch = server.BatchDecisionRequest(
             observation_date="2026-09-11",
