@@ -255,17 +255,17 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(outgoing.full_url, env["MARKETPILOT_ENVIRONMENT_URL"])
 
     def test_product_requires_gpt_connection(self):
-        request = server.ProductCreateRequest(name="測試商品", unit_cost=70, inventory=50, min_gross_margin=0.30)
+        request = server.ProductCreateRequest(name="測試商品", unit_cost=70, inventory=50, low_stock_threshold=10, min_gross_margin=0.30)
         with patch.object(server, "load_settings", return_value=(None, "gpt-4o-mini")):
             with self.assertRaisesRegex(ValueError, "必須先連接 GPT"):
                 server.create_product_with_ai(request)
 
     def test_product_creation_schema_has_no_manual_price_field(self):
         fields = set(server.ProductCreateRequest.model_fields)
-        self.assertEqual(fields, {"name", "unit_cost", "inventory", "min_gross_margin"})
+        self.assertEqual(fields, {"name", "unit_cost", "inventory", "low_stock_threshold", "min_gross_margin"})
 
     def test_ai_prices_product_and_margin_floor_is_enforced(self):
-        request = server.ProductCreateRequest(name="測試商品", unit_cost=70, inventory=50, min_gross_margin=0.30)
+        request = server.ProductCreateRequest(name="測試商品", unit_cost=70, inventory=50, low_stock_threshold=10, min_gross_margin=0.30)
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory) / "products.json"
             with (
@@ -277,6 +277,7 @@ class ServerTests(unittest.TestCase):
                 saved = server.load_products()
         self.assertEqual(product["price"], 100)
         self.assertEqual(product["price_control"], "ai")
+        self.assertEqual(product["low_stock_threshold"], 10)
         self.assertTrue(product["pricing"]["margin_guardrail_applied"])
         self.assertGreaterEqual(product["pricing"]["projected_gross_margin"], 0.30)
         self.assertEqual(saved[0]["name"], "測試商品")

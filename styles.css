@@ -229,6 +229,13 @@ td { padding: 12px 14px; border-top: 1px solid var(--line); font-size: 10.5px; }
 .execution-status { display: flex; align-items: center; gap: 7px; min-height: 34px; padding: 8px 10px; border-radius: 8px; color: var(--green); background: #edf7f2; font-size: 10px; }
 .execution-status svg { width: 14px; height: 14px; }
 .execution-status.notified { color: #a45c2d; background: #fff4e9; }
+.reason-button { width: 100%; margin-top: 9px; }
+.reason-button svg { width: 14px; height: 14px; }
+.reason-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 18px 0; }
+.reason-summary strong { font-size: 12px; color: var(--muted); }
+.reason-block { padding: 14px 0; border-top: 1px solid var(--line); }
+.reason-block small { display: block; margin-bottom: 6px; color: var(--muted); font-weight: 650; }
+.reason-block p { margin: 0; line-height: 1.7; }
 .timeline-card { grid-column: span 7; padding: 20px; }
 .context-card { grid-column: span 5; padding: 20px; }
 .timeline { display: grid; }

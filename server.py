@@ -145,6 +145,7 @@ class ProductCreateRequest(BaseModel):
     name: str = Field(min_length=2, max_length=100)
     unit_cost: float = Field(gt=0, le=10_000_000)
     inventory: int = Field(ge=0, le=10_000_000)
+    low_stock_threshold: int = Field(ge=0, le=10_000_000)
     min_gross_margin: float = Field(ge=0.01, lt=0.95)
 
 
@@ -213,7 +214,7 @@ DECISION_PROMPT = """你是 MarketPilot 的電商決策引擎。輸入是某 SKU
 """
 
 
-INITIAL_PRICING_PROMPT = """你是 MarketPilot 的商品定價引擎。使用者只提供商品名稱、單位成本、初始庫存與不可突破的最低毛利率，由你決定商品的初始售價。
+INITIAL_PRICING_PROMPT = """你是 MarketPilot 的商品定價引擎。使用者只提供商品名稱、單位成本、初始庫存、預警庫存與不可突破的最低毛利率，由你決定商品的初始售價。
 
 請依商品名稱反映的品類定位、成本與庫存水位，提出一個合理、可直接使用的售價。售價必須高於滿足最低毛利率的價格；資料有限時採保守定價並降低 confidence。不得假裝知道未提供的競品、市場價格或品牌資料。使用繁體中文簡短說明理由。
 """
@@ -288,7 +289,22 @@ def analyze_store(context: dict | None = None) -> dict:
         store_context = fetch_external_observation().model_dump(mode="json", exclude_none=True)
         context_source = "external_environment"
     else:
-        store_context = DEFAULT_STORE_CONTEXT
+        store_context = json.loads(json.dumps(DEFAULT_STORE_CONTEXT))
+        saved_products = load_products()
+        if saved_products:
+            store_context["products"] = [
+                {
+                    "sku": product.get("sku"),
+                    "name": product.get("name"),
+                    "price": product.get("price"),
+                    "unit_cost": product.get("unit_cost"),
+                    "stock": product.get("inventory", 0),
+                    "low_stock_threshold": product.get("low_stock_threshold", 0),
+                    "min_gross_margin": product.get("min_gross_margin"),
+                    "low_stock_alert": product.get("inventory", 0) <= product.get("low_stock_threshold", 0),
+                }
+                for product in saved_products
+            ]
         context_source = "demo_store_data"
     started = time.perf_counter()
     client = OpenAI(api_key=api_key)
@@ -712,6 +728,7 @@ def create_product_with_ai(request: ProductCreateRequest) -> dict:
         "name": request.name,
         "unit_cost": request.unit_cost,
         "inventory": request.inventory,
+        "low_stock_threshold": request.low_stock_threshold,
         "min_gross_margin": request.min_gross_margin,
         "price": round(final_price, 2),
         "price_control": "ai",

@@ -132,8 +132,13 @@ function managerPage() {
   <section class="dashboard-grid"><article class="card timeline-card"><div class="card-head"><div><h2>自動執行時間軸</h2><p>今日實際套用與通知紀錄</p></div></div><div class="timeline" id="decisionTimeline"><div class="empty-inline">尚未產生執行紀錄</div></div></article><article class="card context-card"><div class="card-head"><div><h2>市場資料</h2><p id="marketSourceLabel">等待資料來源</p></div><span class="status-pill" id="marketStatus"><i></i>尚未分析</span></div><div id="marketRows"><div class="empty-inline">完成 GPT 分析後顯示實際輸入資料</div></div></article></section>`;
 }
 
-function recommendation(iconName,title,to,result,status) {
-  return `<article class="card recommendation"><div class="rec-top"><span class="rec-icon">${icon(iconName)}</span><span class="rec-impact">執行紀錄</span></div><h3>${title}</h3><p>${status==='seller_notified'?'補貨通知內容':'AI 店長套用內容'}</p><div class="rec-change"><span>${to}</span></div><div class="execution-status ${status==='seller_notified'?'notified':''}"><span>${status==='seller_notified'?icon('bell'):icon('check')}</span><strong>${escapeHTML(result)}</strong></div></article>`;
+function recommendation(iconName,title,to,result,status,index) {
+  return `<article class="card recommendation"><div class="rec-top"><span class="rec-icon">${icon(iconName)}</span><span class="rec-impact">執行紀錄</span></div><h3>${title}</h3><p>${status==='seller_notified'?'補貨通知內容':'AI 店長套用內容'}</p><div class="rec-change"><span>${to}</span></div><div class="execution-status ${status==='seller_notified'?'notified':''}"><span>${status==='seller_notified'?icon('bell'):icon('check')}</span><strong>${escapeHTML(result)}</strong></div><button class="ghost-button reason-button" data-reason-index="${index}">${icon('eye')} 查看 AI 判斷原因</button></article>`;
+}
+
+function openExecutionReason(item, execution) {
+  openModal(`<h2>AI 判斷原因</h2><p>${escapeHTML(item.title)}</p><div class="reason-summary"><span class="pill ${execution?.status==='seller_notified'?'orange':''}">${escapeHTML(execution?.result || '已自動套用')}</span><strong>信心分數 ${Number(item.confidence || 0)}%</strong></div><div class="reason-block"><small>判斷依據</small><p>${escapeHTML(item.rationale || item.description)}</p></div><div class="reason-block"><small>執行內容</small><div class="rec-change"><b>${escapeHTML(item.current_value)}</b>${icon('arrow')}<span>${escapeHTML(item.suggested_value)}</span></div></div><div class="reason-block"><small>預期影響</small><p>${escapeHTML(item.expected_impact)}</p></div><div class="modal-footer"><button class="primary-button modal-cancel">關閉</button></div>`);
+  modalContent.querySelector('.modal-cancel').onclick=closeModal;
 }
 
 function listPage(type) {
@@ -194,7 +199,7 @@ function createModal(title='新增商品') {
 }
 
 function openProductModal() {
-  openModal(`<h2>新增商品</h2><p>輸入商品基本資料，GPT 會自動決定售價。建立後售價將持續由 AI 店長依市場狀況調整。</p><div class="form-grid"><div class="form-group full"><label>商品名稱</label><input id="productName" maxlength="100" placeholder="例如：無線降噪耳機"></div><div class="form-group"><label>單位成本</label><input id="productCost" type="number" min="0.01" step="0.01" placeholder="NT$ 0"></div><div class="form-group"><label>初始庫存</label><input id="productInventory" type="number" min="0" step="1" placeholder="0"></div><div class="form-group full"><label>最低毛利率</label><div class="percent-field"><input id="productMargin" type="number" min="1" max="94" step="0.1" value="30"><span>%</span></div></div></div><div class="ai-price-notice"><span>${icon('spark')}</span><div><strong>售價由 AI 店長管理</strong><p>你不需要設定價格。GPT 會建立初始售價，系統會確保任何調整都不低於最低毛利率。</p></div></div><div class="modal-footer"><button class="ghost-button modal-cancel">取消</button><button class="primary-button create-ai-product">由 AI 建立商品</button></div>`);
+  openModal(`<h2>新增商品</h2><p>輸入商品基本資料，GPT 會自動決定售價。建立後售價將持續由 AI 店長依市場狀況調整。</p><div class="form-grid"><div class="form-group full"><label>商品名稱</label><input id="productName" maxlength="100" placeholder="例如：無線降噪耳機"></div><div class="form-group"><label>單位成本</label><input id="productCost" type="number" min="0.01" step="0.01" placeholder="NT$ 0"></div><div class="form-group"><label>初始庫存</label><input id="productInventory" type="number" min="0" step="1" placeholder="0"></div><div class="form-group"><label>預警庫存</label><input id="productLowStock" type="number" min="0" step="1" value="10" placeholder="10"></div><div class="form-group"><label>最低毛利率</label><div class="percent-field"><input id="productMargin" type="number" min="1" max="94" step="0.1" value="30"><span>%</span></div></div></div><div class="ai-price-notice"><span>${icon('spark')}</span><div><strong>售價由 AI 店長管理</strong><p>你不需要設定價格。GPT 會建立初始售價；低於預警庫存時，AI 店長會通知賣家補貨。</p></div></div><div class="modal-footer"><button class="ghost-button modal-cancel">取消</button><button class="primary-button create-ai-product">由 AI 建立商品</button></div>`);
   modalContent.querySelector('.modal-cancel').onclick=closeModal;
   modalContent.querySelector('.create-ai-product').onclick=async e=>{
     const button=e.currentTarget;
@@ -202,9 +207,10 @@ function openProductModal() {
       name:document.getElementById('productName').value.trim(),
       unit_cost:Number(document.getElementById('productCost').value),
       inventory:Number(document.getElementById('productInventory').value),
+      low_stock_threshold:Number(document.getElementById('productLowStock').value),
       min_gross_margin:Number(document.getElementById('productMargin').value)/100
     };
-    if(payload.name.length<2 || payload.unit_cost<=0 || !Number.isInteger(payload.inventory) || payload.inventory<0 || payload.min_gross_margin<.01 || payload.min_gross_margin>=.95){showToast('請完整填寫商品名稱、成本、庫存與最低毛利率');return;}
+    if(payload.name.length<2 || payload.unit_cost<=0 || !Number.isInteger(payload.inventory) || payload.inventory<0 || !Number.isInteger(payload.low_stock_threshold) || payload.low_stock_threshold<0 || payload.min_gross_margin<.01 || payload.min_gross_margin>=.95){showToast('請完整填寫商品名稱、成本、庫存、預警庫存與最低毛利率');return;}
     button.disabled=true;button.innerHTML='<span class="spinner"></span> GPT 定價中';
     try{
       const result=await api('/api/products',{method:'POST',body:JSON.stringify(payload)});
@@ -222,7 +228,8 @@ async function loadPersistedProducts() {
     body.querySelectorAll('[data-persisted-product]').forEach(row=>row.remove());
     (result.products || []).forEach(product=>{
       const row=document.createElement('tr');row.dataset.persistedProduct=product.id;
-      row.innerHTML=`<td><div class="customer-cell"><span class="product-thumb">📦</span><div><strong>${escapeHTML(product.name)}</strong><small>最低毛利 ${(Number(product.min_gross_margin)*100).toFixed(1)}%</small></div></div></td><td>${escapeHTML(product.sku)}</td><td><strong>${money(product.price)}</strong><small class="ai-price-label">AI 自動定價 · ${escapeHTML(product.pricing?.model || '')}</small></td><td>${Number(product.inventory).toLocaleString()} 件</td><td><span class="pill">販售中</span></td><td><button class="icon-button bare">•••</button></td>`;
+      const inventory=Number(product.inventory), threshold=Number(product.low_stock_threshold || 0), outOfStock=inventory===0, lowStock=!outOfStock&&inventory<=threshold;
+      row.innerHTML=`<td><div class="customer-cell"><span class="product-thumb">📦</span><div><strong>${escapeHTML(product.name)}</strong><small>預警 ${threshold.toLocaleString()} 件 · 最低毛利 ${(Number(product.min_gross_margin)*100).toFixed(1)}%</small></div></div></td><td>${escapeHTML(product.sku)}</td><td><strong>${money(product.price)}</strong><small class="ai-price-label">AI 自動定價 · ${escapeHTML(product.pricing?.model || '')}</small></td><td>${inventory.toLocaleString()} 件</td><td><span class="pill ${outOfStock||lowStock?'orange':''}">${outOfStock?'已售罄':lowStock?'低庫存':'販售中'}</span></td><td><button class="icon-button bare">•••</button></td>`;
       body.prepend(row);
     });
   }catch{/* 靜態開啟時保留展示資料 */}
@@ -289,8 +296,12 @@ function renderAIAnalysis(payload) {
   document.getElementById('recommendationGrid').innerHTML=recommendations.map((item,index)=>recommendation(
     categoryIcons[item.category] || 'spark',
     escapeHTML(item.title), escapeHTML(item.suggested_value),
-    executions[index]?.result || '已自動套用', executions[index]?.status || 'applied'
+    executions[index]?.result || '已自動套用', executions[index]?.status || 'applied', index
   )).join('');
+  document.querySelectorAll('.reason-button').forEach(button=>button.onclick=()=>{
+    const index=Number(button.dataset.reasonIndex);
+    openExecutionReason(recommendations[index],executions[index]);
+  });
   renderMarketSnapshot(payload.market_snapshot || {}, data.market_status, meta.context_source);
   const timeline=document.getElementById('decisionTimeline');
   if(timeline) timeline.innerHTML=executions.map(record=>`<div class="timeline-item"><div class="timeline-time">${new Date(record.executed_at).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})}</div><div class="timeline-line"><i></i></div><div class="timeline-copy"><strong>${escapeHTML(record.title)}</strong><p>${escapeHTML(record.result)}</p></div><span class="timeline-result">${record.status==='seller_notified'?'已通知':'已套用'}</span></div>`).join('') || '<div class="empty-inline">今日沒有需要執行的策略</div>';
