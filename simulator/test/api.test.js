@@ -7,11 +7,11 @@ const product=(id,name='測試商品')=>({id,name,category:'MarketPilot 商品',
 
 test('catalog sync keeps exactly the admin products and creates competitor prices',()=>{
   const state=createState(12345);
-  syncProducts(state,[product('AI-1','衣服'),product('AI-2','衣服2'),product('AI-3','手錶')]);
+  syncProducts(state,[product('AI-1','上衣'),product('AI-2','耳機'),product('AI-3','手錶')]);
   assert.deepEqual(state.catalog.map(item=>item.id),['AI-1','AI-2','AI-3']);
   assert.equal(state.listings.filter(item=>item.seller==='pilot').length,3);
   assert.equal(state.listings.filter(item=>item.seller!=='pilot').length,3);
-  syncProducts(state,[product('AI-2','衣服2'),product('AI-3','手錶')]);
+  syncProducts(state,[product('AI-2','耳機'),product('AI-3','手錶')]);
   assert.deepEqual(state.catalog.map(item=>item.id),['AI-2','AI-3']);
   assert.equal(state.day,0);
 });

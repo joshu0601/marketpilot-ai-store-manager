@@ -380,11 +380,11 @@ def attach_execution_records(payload: dict) -> dict:
     return payload
 
 
-def get_daily_analysis(context: dict | None = None) -> dict:
-    """Return one persisted GPT market analysis for each Taipei calendar day."""
+def get_daily_analysis(context: dict | None = None, *, force_refresh: bool = False) -> dict:
+    """Cache once per Taipei day, unless an explicit refresh was requested."""
     with DAILY_ANALYSIS_LOCK:
         cached = load_daily_analysis()
-        if cached is not None:
+        if cached is not None and not force_refresh:
             result = json.loads(json.dumps(cached))
             result.setdefault("meta", {})["cache_hit"] = True
             attach_execution_records(result)
@@ -1200,7 +1200,10 @@ class MarketPilotHandler(SimpleHTTPRequestHandler):
                 context = payload.get("context")
                 if context is not None and not isinstance(context, dict):
                     raise ValueError("context 必須是物件")
-                self._json({"ok": True, **get_daily_analysis(context)})
+                force_refresh = payload.get("force_refresh", False)
+                if not isinstance(force_refresh, bool):
+                    raise ValueError("force_refresh 必須是布林值")
+                self._json({"ok": True, **get_daily_analysis(context, force_refresh=force_refresh)})
                 return
             if path == "/api/agent/decide":
                 request = AgentDecisionRequest.model_validate(payload)

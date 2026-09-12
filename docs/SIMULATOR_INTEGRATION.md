@@ -67,3 +67,7 @@ GPT 使用 Responses API 的結構化輸出：[official OpenAI documentation](ht
 `GET /api/simulator/progress` 回傳 `status`（idle/running/completed/failed）、`stage`（competitor/manager/buyer/completed/idle）、目標模擬日 `day`，以及店長目前的 `product_name`、`product_index`、`product_count`。前台每秒讀取一次。這個讀取端點使用獨立的鎖，GPT 呼叫期间仍可回應。
 
 階段直接由後端在執行邊界更新：競品 GPT 完成後，店長才會收到新競品報價；全部商品決策完成後，使用者 agent 才依今日價格購買。失敗時保留當下階段，不會顯示後续 agent 已完成。狀態在服務重啟後回到 idle；重新整理網頁則能接續讀取執行中的進度。
+
+## 明確要求重新分析今日市場
+
+一般 `POST /api/ai/analyze` 仍使用台北當日快取。操作人明確要求重跑時，可傳入 `{"force_refresh": true, "context": {...}}`，用指定的最新市場快照重新產生並保存當日分析。重跑失敗時保留原先成功的分析；不會推進市場模擬日。前台切換頁面仍使用一般快取讀取。

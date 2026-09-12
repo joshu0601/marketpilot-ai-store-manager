@@ -36,7 +36,7 @@ class ProgressTests(unittest.TestCase):
             progress = server.simulation_progress()
             observed.append(progress['stage'])
             self.assertEqual(progress['stage'],'manager')
-            self.assertEqual(progress['product_name'],'測試衣服')
+            self.assertEqual(progress['product_name'],'測試上衣')
             self.assertEqual(progress['product_index'],1)
             self.assertEqual(progress['product_count'],1)
             self.assertEqual(request.market.competitor_price,510)

@@ -188,7 +188,7 @@ td { padding: 12px 14px; border-top: 1px solid var(--line); font-size: 10.5px; }
 .pagination button.active { color: white; border-color: var(--green); background: var(--green); }
 
 /* AI manager */
-.manager-hero { display: grid; grid-template-columns: 1.35fr .65fr; gap: 16px; margin-bottom: 16px; }
+.manager-hero { display: grid; grid-template-columns: 1fr; gap: 16px; margin-bottom: 16px; }
 .manager-main { position: relative; overflow: hidden; padding: 25px; color: #eaf2ee; background: #1b302a; border-color: #1b302a; }
 .manager-main::after { content: ""; position: absolute; width: 240px; height: 240px; right: -90px; top: -100px; border: 44px solid rgba(139,193,168,.05); border-radius: 50%; }
 .manager-label { display: inline-flex; align-items: center; gap: 6px; color: #96c8b0; font-size: 9px; font-weight: 700; letter-spacing: .7px; text-transform: uppercase; }
@@ -204,14 +204,6 @@ td { padding: 12px 14px; border-top: 1px solid var(--line); font-size: 10.5px; }
 .manager-actions { display: flex; gap: 8px; }
 .manager-main .primary-button { color: #24483a; background: #dcece4; box-shadow: none; }
 .manager-main .ghost-button { color: #c5d4ce; background: transparent; border-color: rgba(255,255,255,.15); }
-.confidence-card { padding: 22px; display: flex; flex-direction: column; }
-.confidence-card h2 { margin: 0; font-size: 13px; }
-.confidence-ring { width: 125px; height: 125px; margin: 20px auto 14px; position: relative; }
-.confidence-ring svg { transform: rotate(-90deg); }
-.confidence-ring > div { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
-.confidence-ring strong { font-size: 24px; }
-.confidence-ring small { color: var(--muted); font-size: 9px; }
-.confidence-note { margin-top: auto; padding: 10px; color: var(--muted); background: var(--surface-soft); border-radius: 8px; font-size: 9.5px; line-height: 1.5; }
 .recommendation-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 16px; }
 .recommendation-grid .ai-empty { grid-column: 1 / -1; min-height: 185px; display: grid; place-content: center; }
 .recommendation { padding: 18px; }

@@ -43,16 +43,16 @@ const escapeHTML = value => String(value ?? '').replace(/[&<>'"]/g, char => ({'&
 
 const orders = [
   ['#MP-10482','陳怡安','yi.an@email.com','手錶 × 1','799','已付款','green'],
-  ['#MP-10481','王柏凱','kai.w@email.com','衣服2 × 1','799','待出貨','orange'],
-  ['#MP-10480','林書妤','shuyu@email.com','衣服 × 2','298','配送中','blue'],
+  ['#MP-10481','王柏凱','kai.w@email.com','耳機 × 1','799','待出貨','orange'],
+  ['#MP-10480','林書妤','shuyu@email.com','上衣 × 2','298','配送中','blue'],
   ['#MP-10479','張家豪','hao.z@email.com','手錶 × 1','799','已完成','gray'],
-  ['#MP-10478','許雅婷','yating@email.com','衣服2 × 1','799','已完成','gray'],
-  ['#MP-10477','黃冠宇','kuan@email.com','衣服 × 1','149','待付款','orange']
+  ['#MP-10478','許雅婷','yating@email.com','耳機 × 1','799','已完成','gray'],
+  ['#MP-10477','黃冠宇','kuan@email.com','上衣 × 1','149','待付款','orange']
 ];
 
 const products = [
-  ['📦','衣服','AI-163C99BC','149','50','販售中','green'],
-  ['📦','衣服2','AI-6C86F661','799','100','販售中','green'],
+  ['📦','上衣','AI-163C99BC','149','50','販售中','green'],
+  ['📦','耳機','AI-6C86F661','799','100','販售中','green'],
   ['📦','手錶','AI-3FD44584','799','50','販售中','green']
 ];
 
@@ -93,7 +93,7 @@ function orderTable(rows) {
 function managerPage() {
   return `${pageHead('AI STORE MANAGER','AI 店長','把每日市場訊號轉成可以理解、可以控制的營運決策。',`<button class="ghost-button ai-connect-button"><span class="connection-dot" id="aiConnection"></span><span id="aiConnectionText">檢查連線</span></button><button class="primary-button" disabled>${icon('spark')} 每日分析一次</button>`)}
   <section class="manager-hero"><article class="card manager-main"><span class="manager-label" id="aiAnalysisLabel"><i></i>正在讀取今日分析</span><h1 id="aiSummary">正在準備市場分析</h1><p id="aiSummaryNote">系統每天只會呼叫 GPT 一次，分析完成後自動執行策略並留下紀錄。</p><div class="decision-metrics"><div><small>分析模型</small><strong id="analysisModel">—</strong></div><div><small>資料來源</small><strong id="analysisSource">—</strong></div><div><small>自動執行</small><strong id="analysisCount">—</strong></div></div><div class="manager-actions"><button class="primary-button" id="executionSummary" disabled>等待今日自動執行</button><button class="ghost-button" disabled>明日自動更新</button></div></article>
-  <article class="card confidence-card"><h2>決策可信度</h2><div class="confidence-ring"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="51" fill="none" stroke="#edf0ec" stroke-width="9"/><circle id="confidenceProgress" cx="60" cy="60" r="51" fill="none" stroke="#2b7d60" stroke-width="9" stroke-linecap="round" stroke-dasharray="320" stroke-dashoffset="320"/></svg><div><strong id="confidenceValue">—</strong><small id="confidenceLabel">尚未分析</small></div></div><div class="confidence-note" id="aiMeta">完成後會顯示實際模型、回應時間與 token 用量。</div></article></section>
+  </section>
   <div class="card-head"><div><h2>今日執行紀錄</h2><p>AI 策略會自動套用，缺貨風險會通知賣家</p></div><span class="pill gray" id="recommendationCount">0 項</span></div>
   <section class="recommendation-grid" id="recommendationGrid"><article class="card empty-state ai-empty"><span class="metric-icon">${icon('spark')}</span><h3>等待每日分析</h3><p>分析完成後會顯示實際執行與補貨通知。</p></article></section>
   <section class="dashboard-grid"><article class="card timeline-card"><div class="card-head"><div><h2>自動執行時間軸</h2><p>今日實際套用與通知紀錄</p></div></div><div class="timeline" id="decisionTimeline"><div class="empty-inline">尚未產生執行紀錄</div></div></article><article class="card context-card"><div class="card-head"><div><h2>市場資料</h2><p id="marketSourceLabel">等待資料來源</p></div><span class="status-pill" id="marketStatus"><i></i>尚未分析</span></div><div id="marketRows"><div class="empty-inline">完成 GPT 分析後顯示實際輸入資料</div></div></article></section>`;
@@ -341,10 +341,6 @@ function renderAIAnalysis(payload) {
   document.getElementById('aiSummary').textContent=data.summary;
   document.getElementById('aiAnalysisLabel').innerHTML=`<i></i>${meta.cache_hit?'今日分析已保存':'今日 GPT 分析完成'} · ${generatedLabel}`;
   document.getElementById('aiSummaryNote').textContent='此分析每天產生一次並保存至隔日。定價與促銷策略會自動套用；即將缺貨時會通知賣家補貨。';
-  document.getElementById('confidenceValue').textContent=`${data.confidence}%`;
-  document.getElementById('confidenceLabel').textContent=data.confidence>=80?'高可信':data.confidence>=60?'中等可信':'需審慎評估';
-  document.getElementById('confidenceProgress').style.strokeDashoffset=String(320-(320*data.confidence/100));
-  document.getElementById('aiMeta').textContent=`${meta.model} · ${Number(meta.latency_ms).toLocaleString()} ms · ${Number(meta.input_tokens)+Number(meta.output_tokens)} tokens${meta.cache_hit?' · 今日快取':''}`;
   document.getElementById('recommendationCount').textContent=`${executions.length} 項已處理`;
   document.getElementById('analysisModel').textContent=meta.model;
   document.getElementById('analysisSource').textContent=meta.context_source==='external_environment'?'外部環境':meta.context_source==='api_request'?'API 資料':'商店資料';
@@ -403,10 +399,6 @@ function renderAIError(message) {
   document.getElementById('aiAnalysisLabel').innerHTML='<i></i>GPT 分析未完成';
   document.getElementById('aiSummary').textContent='目前無法完成市場分析';
   document.getElementById('aiSummaryNote').textContent=message;
-  document.getElementById('confidenceValue').textContent='—';
-  document.getElementById('confidenceLabel').textContent='無分析結果';
-  document.getElementById('confidenceProgress').style.strokeDashoffset='320';
-  document.getElementById('aiMeta').textContent='沒有使用預先產生或模擬的 GPT 回覆。';
   document.getElementById('recommendationCount').textContent='0 項';
   document.getElementById('analysisModel').textContent='—';
   document.getElementById('analysisSource').textContent='—';

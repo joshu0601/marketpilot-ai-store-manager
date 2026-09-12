@@ -299,7 +299,7 @@ class ServerTests(unittest.TestCase):
     def simulator_state(self):
         return {
             "day": 1,
-            "catalog": [{"id": "P001", "name": "測試衣服", "category": "服飾", "cost": 300, "minGrossMargin": 0.40}],
+            "catalog": [{"id": "P001", "name": "測試上衣", "category": "服飾", "cost": 300, "minGrossMargin": 0.40}],
             "listings": [
                 {"id": "pilot-P001", "seller": "pilot", "productId": "P001", "price": 500, "inventory": 8, "couponDiscount": 0, "promotionLevel": 0},
                 {"id": "npc-P001", "seller": "npc1", "productId": "P001", "price": 480, "inventory": 30},
@@ -417,7 +417,7 @@ class ServerTests(unittest.TestCase):
         request.assert_not_called()
 
     def test_cost_update_reprices_immediately_without_creating_product(self):
-        product = {"id":"id-1","sku":"P001","name":"測試衣服","unit_cost":300,"inventory":8,"low_stock_threshold":2,"min_gross_margin":.4,"price":500}
+        product = {"id":"id-1","sku":"P001","name":"測試上衣","unit_cost":300,"inventory":8,"low_stock_threshold":2,"min_gross_margin":.4,"price":500}
         with tempfile.TemporaryDirectory() as directory, patch.object(server, "PRODUCTS_FILE", Path(directory)/"products.json"), patch.object(server, "sync_products_to_simulator", return_value=self.simulator_state()), patch.object(server, "simulator_request") as simulator, patch.object(server, "load_settings", return_value=("test", "gpt-4o-mini")), patch.object(server, "OpenAI", FakePricingOpenAI):
             server.persist_product(product)
             result = server.update_product_cost("id-1", 600)
@@ -430,7 +430,7 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(simulator.call_args.args[2]["price"], 1000)
 
     def test_cost_update_failure_preserves_existing_cost_and_price(self):
-        product = {"id":"id-1","sku":"P001","name":"測試衣服","unit_cost":300,"inventory":8,"min_gross_margin":.4,"price":500}
+        product = {"id":"id-1","sku":"P001","name":"測試上衣","unit_cost":300,"inventory":8,"min_gross_margin":.4,"price":500}
         with tempfile.TemporaryDirectory() as directory, patch.object(server, "PRODUCTS_FILE", Path(directory)/"products.json"), patch.object(server, "sync_products_to_simulator", return_value=self.simulator_state()), patch.object(server, "create_product_with_ai", side_effect=RuntimeError("GPT failed")), patch.object(server, "simulator_request") as simulator:
             server.persist_product(product)
             with self.assertRaisesRegex(RuntimeError, "GPT failed"):
