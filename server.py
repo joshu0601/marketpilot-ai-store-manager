@@ -802,6 +802,38 @@ def simulator_catalog_map(state: dict) -> dict[str, dict]:
     return {str(item["id"]): item for item in state.get("catalog", []) if isinstance(item, dict) and item.get("id")}
 
 
+def simulator_product_payload(product: dict) -> dict:
+    return {
+        "id": product["sku"],
+        "name": product["name"],
+        "category": "MarketPilot 商品",
+        "cost": product["unit_cost"],
+        "quality": 0.85,
+        "description": f"{product['name']}，由 MarketPilot AI 店長管理價格與銷售策略。",
+        "emoji": "📦",
+        "lowStockThreshold": product.get("low_stock_threshold", 0),
+        "minGrossMargin": product.get("min_gross_margin", 0.30),
+        "price": product["price"],
+        "inventory": product["inventory"],
+    }
+
+
+def sync_product_to_simulator(product: dict) -> dict:
+    return simulator_request("/api/products", "POST", simulator_product_payload(product))
+
+
+def sync_products_to_simulator(state: dict | None = None) -> dict:
+    state = state or simulator_request("/api/state")
+    simulator_catalog = simulator_catalog_map(state)
+    synced = False
+    for product in load_products():
+        simulator_product = simulator_catalog.get(product.get("sku"))
+        if product.get("sku") and (simulator_product is None or "minGrossMargin" not in simulator_product):
+            sync_product_to_simulator(product)
+            synced = True
+    return simulator_request("/api/state") if synced else state
+
+
 def save_simulator_run(payload: dict) -> None:
     SIMULATOR_RUN_FILE.parent.mkdir(parents=True, exist_ok=True)
     temporary = SIMULATOR_RUN_FILE.with_suffix(".tmp")
@@ -818,7 +850,7 @@ def load_simulator_run() -> dict | None:
 
 
 def simulator_dashboard() -> dict:
-    state = simulator_request("/api/state")
+    state = sync_products_to_simulator()
     return {"state": state, "last_agent_run": load_simulator_run()}
 
 
@@ -826,10 +858,14 @@ def bootstrap_simulator(state: dict) -> dict:
     api_key, model = load_settings()
     if not api_key:
         raise ValueError("啟動 AI 市場模擬前必須先設定 OPENAI_API_KEY")
-    catalog = state.get("catalog", [])
+    listed_ids = {item.get("productId") for item in state.get("listings", []) if item.get("seller") == "pilot"}
+    catalog = [item for item in state.get("catalog", []) if item.get("id") not in listed_ids]
     listings = state.get("listings", [])
     if not catalog:
-        raise RuntimeError("市場模擬器沒有商品目錄")
+        next_state = simulator_request("/api/step", "POST", {"days": 1})
+        run = {"phase": "bootstrap", "simulation_day": next_state.get("day"), "decisions": [], "seller_notifications": [], "created_at": datetime.now(TAIPEI_TIMEZONE).isoformat()}
+        save_simulator_run(run)
+        return {"state": next_state, "agent_run": run}
     competitor_prices = {
         item["id"]: [listing.get("price") for listing in listings if listing.get("productId") == item["id"] and listing.get("seller") != "pilot"]
         for item in catalog
@@ -852,7 +888,7 @@ def bootstrap_simulator(state: dict) -> dict:
         text_format=SimulatorBootstrapProposal,
     )
     proposal = require_parsed_output(response, "GPT 沒有回傳可解析的模擬商品售價")
-    catalog_by_id = simulator_catalog_map(state)
+    catalog_by_id = {str(item["id"]): item for item in catalog}
     proposed = {item.product_id: item for item in proposal.listings}
     if set(proposed) != set(catalog_by_id):
         raise RuntimeError("GPT 初始上架結果必須包含模擬器目錄中的所有商品")
@@ -916,6 +952,7 @@ def simulator_batch(state: dict) -> BatchDecisionRequest:
             if match:
                 history.append(simulator_daily_sales(match))
         cost = float(product["cost"])
+        target_margin = max(0.01, min(0.94, float(product.get("minGrossMargin", 0.30))))
         current_price = float(listing["price"])
         observations.append(AgentDecisionRequest(
             request_id=f"sim-{state.get('day')}-{product_id}",
@@ -927,14 +964,14 @@ def simulator_batch(state: dict) -> BatchDecisionRequest:
             events=[MarketEvent(type=str(event.get("name", "市場事件")), severity=min(1, abs(float(event.get("effect", 1)) - 1) / 0.5), description=f"影響係數 {event.get('effect', 1)}") for event in active_events],
             history_7d=history[-7:],
             last_action=Action(price=current_price, ad_budget=float(listing.get("adBudget", 0)), coupon_discount=float(listing.get("couponDiscount", 0)), reorder_quantity=0, promotion_level=float(listing.get("promotionLevel", 0))),
-            constraints=DecisionConstraints(target_gross_margin=.30, price_min=math.ceil((cost / .7) * 100) / 100, price_max=cost * 5, max_price_change_pct=.15, ad_budget_min=0, ad_budget_max=5000, max_ad_budget_change_pct=.30, coupon_discount_max=.30, reorder_quantity_max=500, promotion_level_max=1, safety_stock_days=5, target_stock_days=12),
+            constraints=DecisionConstraints(target_gross_margin=target_margin, price_min=math.ceil((cost / (1 - target_margin)) * 100) / 100, price_max=cost * 5, max_price_change_pct=.15, ad_budget_min=0, ad_budget_max=5000, max_ad_budget_change_pct=.30, coupon_discount_max=.30, reorder_quantity_max=500, promotion_level_max=1, safety_stock_days=5, target_stock_days=12),
         ))
     return BatchDecisionRequest(batch_id=f"market-simulator-day-{state.get('day')}", observation_date=observation_date, observations=observations)
 
 
 def run_simulator_day() -> dict:
-    state = simulator_request("/api/state")
-    if not any(item.get("seller") == "pilot" for item in state.get("listings", [])):
+    state = sync_products_to_simulator()
+    if not any(item.get("seller") == "pilot" for item in state.get("listings", [])) or not state.get("dailyResults"):
         return bootstrap_simulator(state)
     decisions = decide_all_products(simulator_batch(state))
     actions = []
@@ -959,7 +996,7 @@ def run_simulator_day() -> dict:
 def reset_simulator(seed: int = 12345) -> dict:
     state = simulator_request("/api/reset", "POST", {"seed": seed})
     save_simulator_run({})
-    return state
+    return sync_products_to_simulator(state)
 
 
 def queue_simulator_restock(product_id: str, quantity: int) -> dict:
@@ -1092,7 +1129,13 @@ class MarketPilotHandler(SimpleHTTPRequestHandler):
                 return
             if path == "/api/products":
                 product_request = ProductCreateRequest.model_validate(payload)
-                self._json({"ok": True, "product": create_product_with_ai(product_request)}, HTTPStatus.CREATED)
+                product = create_product_with_ai(product_request)
+                try:
+                    sync_result = sync_product_to_simulator(product)
+                    product["marketplace_sync"] = {"synced": True, "created": sync_result.get("created", False)}
+                except Exception as exc:
+                    product["marketplace_sync"] = {"synced": False, "error": str(exc)}
+                self._json({"ok": True, "product": product}, HTTPStatus.CREATED)
                 return
             if path == "/api/simulator/run-day":
                 self._json({"ok": True, **run_simulator_day()})

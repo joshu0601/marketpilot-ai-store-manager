@@ -303,7 +303,7 @@ class ServerTests(unittest.TestCase):
     def simulator_state(self):
         return {
             "day": 1,
-            "catalog": [{"id": "P001", "name": "測試衣服", "category": "服飾", "cost": 300}],
+            "catalog": [{"id": "P001", "name": "測試衣服", "category": "服飾", "cost": 300, "minGrossMargin": 0.40}],
             "listings": [
                 {"id": "pilot-P001", "seller": "pilot", "productId": "P001", "price": 500, "inventory": 8, "adBudget": 100, "couponDiscount": 0, "promotionLevel": 0},
                 {"id": "npc-P001", "seller": "npc1", "productId": "P001", "price": 480, "inventory": 30},
@@ -320,6 +320,28 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(item.market.competitor_price, 480)
         self.assertEqual(item.market.demand_index, 1.3)
         self.assertEqual(item.inventory.on_hand, 8)
+        self.assertEqual(item.constraints.target_gross_margin, 0.40)
+        self.assertEqual(item.constraints.price_min, 500)
+
+    def test_existing_admin_products_are_synced_to_simulator_catalog(self):
+        state = self.simulator_state()
+        product = {
+            "sku": "AI-12AB34CD", "name": "測試新品", "unit_cost": 100,
+            "inventory": 8, "low_stock_threshold": 2, "min_gross_margin": 0.40, "price": 170,
+        }
+        synced_state = {**state, "catalog": [*state["catalog"], {"id": product["sku"], "name": product["name"]}]}
+        with (
+            patch.object(server, "load_products", return_value=[product]),
+            patch.object(server, "simulator_request", side_effect=[{"created": True}, synced_state]) as request,
+        ):
+            result = server.sync_products_to_simulator(state)
+        self.assertEqual(result, synced_state)
+        self.assertEqual(request.call_args_list[0].args[0:2], ("/api/products", "POST"))
+        payload = request.call_args_list[0].args[2]
+        self.assertEqual(payload["id"], "AI-12AB34CD")
+        self.assertEqual(payload["price"], 170)
+        self.assertEqual(payload["inventory"], 8)
+        self.assertEqual(payload["minGrossMargin"], 0.40)
 
     def test_simulator_applies_strategy_but_keeps_restock_as_seller_notification(self):
         state = self.simulator_state()
@@ -330,12 +352,13 @@ class ServerTests(unittest.TestCase):
         }
         next_state = {**state, "day": 2}
         with (
-            patch.object(server, "simulator_request", side_effect=[state, {"accepted": []}, next_state]) as request,
+            patch.object(server, "sync_products_to_simulator", return_value=state),
+            patch.object(server, "simulator_request", side_effect=[{"accepted": []}, next_state]) as request,
             patch.object(server, "decide_all_products", return_value={"decisions": [decision], "all_sources_ai": True}),
             patch.object(server, "save_simulator_run"),
         ):
             result = server.run_simulator_day()
-        queued = request.call_args_list[1].args[2]["actions"]
+        queued = request.call_args_list[0].args[2]["actions"]
         self.assertEqual([item["type"] for item in queued], ["update_price", "update_strategy"])
         self.assertEqual(result["agent_run"]["seller_notifications"][0]["quantity"], 40)
     def test_daily_batch_refuses_non_ai_fallback(self):

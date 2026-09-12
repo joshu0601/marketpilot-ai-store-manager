@@ -49,7 +49,7 @@ OPENAI_MODEL=gpt-4o-mini
 
 AI 店長頁不包含預先填寫的 GPT 結論。每天第一次進入時會呼叫真實模型，結果保存於 `data/daily_analysis.json`；同一個台北日再次進入只會讀取今日快照，不會重複呼叫 GPT。定價、廣告與促銷建議會自動產生已套用紀錄，庫存類建議則產生賣家補貨通知。若設定了 `MARKETPILOT_ENVIRONMENT_URL`，會先取得外部環境最新 Observation，再交給 GPT 分析並在畫面標示資料來源。
 
-新增商品時不提供售價欄位。`POST /api/products` 會由 GPT 決定初始售價，並由最低毛利防護再次驗證；目前庫存小於或等於預警庫存時會標記低庫存並提供給每日 AI 分析。詳細格式見 [AI 商品建立 API](docs/PRODUCTS_API.md)。
+新增商品時不提供售價欄位。`POST /api/products` 會由 GPT 決定初始售價，並由最低毛利防護再次驗證；建立完成後會立即同步至 MarketSimulator 消費者商城。既有商品也會在開啟模擬後台或推進新一天時自動補同步。目前庫存小於或等於預警庫存時會標記低庫存並提供給每日 AI 分析。詳細格式見 [AI 商品建立 API](docs/PRODUCTS_API.md)。
 
 ## 串接外部模擬環境
 

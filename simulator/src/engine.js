@@ -22,18 +22,21 @@ const initialListings = [
 function seeded(seed) { let s = (Number(seed) || 1) >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
 function demandFactor(state, product) { return state.events.filter(e => state.day >= e.start_day && state.day < e.start_day + e.duration).reduce((factor, e) => !e.category || e.category === product.category ? factor * e.effect : factor, 1); }
 function purchaseScore(buyer, product, listing, random) { const preference = buyer.likes.includes(product.category) ? .22 : 0; const affordable = Math.min(1.25, (product.cost * buyer.budget * 1.7) / listing.price); return (product.quality * 1.05) + affordable * .7 + preference + (random() - .5) * .28; }
+const stateCatalog = state => Array.isArray(state.catalog) ? state.catalog : catalog;
+const stateInfo = state => Object.fromEntries(stateCatalog(state).map(product => [product.id, product]));
 
-export function createState(seed = 12345) { return { day:0, seed:Number(seed), listings:structuredClone(initialListings), logs:['市場已準備完成：NPC 賣家已上架 6 項商品。'], events:[], history:[], dailyResults:[], dailyHistory:[], pendingActions:[] }; }
+export function createState(seed = 12345) { return { day:0, seed:Number(seed), catalog:structuredClone(catalog), listings:structuredClone(initialListings), logs:['市場已準備完成：NPC 賣家已上架 6 項商品。'], events:[], history:[], dailyResults:[], dailyHistory:[], pendingActions:[] }; }
 
 export function metrics(state) { const mine = state.listings.filter(x => x.seller === 'pilot'); const market = state.listings.reduce((n,x) => n + x.unitsSold, 0); const units = mine.reduce((n,x) => n + x.unitsSold, 0); return { revenue:mine.reduce((n,x) => n+x.revenue,0), profit:mine.reduce((n,x) => n+x.profit,0), units, inventory:mine.reduce((n,x) => n+x.inventory,0), marketUnits:market, share:market ? units / market * 100 : 0 }; }
 
 export function validateAction(action, state) {
+  const products = stateInfo(state);
   if (!action || typeof action !== 'object' || !['list_product','update_price','update_strategy','restock','delist_product'].includes(action.type)) return '未知的動作類型';
-  if (!info[action.productId]) return '商品 ID 不存在';
+  if (!products[action.productId]) return '商品 ID 不存在';
   const listing = state.listings.find(x => x.seller === 'pilot' && x.productId === action.productId);
   if (action.type === 'list_product' && listing) return '商品已上架';
   if (action.type !== 'list_product' && !listing) return '商品尚未上架';
-  if (['list_product','update_price'].includes(action.type) && (!Number.isFinite(Number(action.price)) || Number(action.price) <= info[action.productId].cost)) return '售價必須高於成本';
+  if (['list_product','update_price'].includes(action.type) && (!Number.isFinite(Number(action.price)) || Number(action.price) <= products[action.productId].cost)) return '售價必須高於成本';
   if (action.type === 'list_product' && (!Number.isInteger(Number(action.initial_inventory)) || Number(action.initial_inventory) <= 0)) return '初始庫存必須是正整數';
   if (action.type === 'restock' && (!Number.isInteger(Number(action.quantity)) || Number(action.quantity) <= 0)) return '補貨數量必須是正整數';
   if (action.type === 'update_strategy' && (
@@ -46,9 +49,25 @@ export function validateAction(action, state) {
 
 export function queueActions(state, actions) { const rejected = actions.map(action => ({ action, error:validateAction(action, state) })).filter(x => x.error); if (rejected.length) return { accepted:[], rejected }; state.pendingActions.push(...structuredClone(actions)); return { accepted:actions, rejected:[] }; }
 
+export function addProduct(state, input) {
+  const product = { id:String(input.id || ''), name:String(input.name || ''), category:String(input.category || 'MarketPilot 商品'), cost:Number(input.cost), quality:Number(input.quality || .85), description:String(input.description || ''), emoji:String(input.emoji || '📦'), lowStockThreshold:Number(input.lowStockThreshold || 0), minGrossMargin:Number(input.minGrossMargin || .30) };
+  if (!product.id || !product.name || !Number.isFinite(product.cost) || product.cost <= 0) throw new Error('商品 ID、名稱與成本格式不正確');
+  state.catalog = Array.isArray(state.catalog) ? state.catalog : structuredClone(catalog);
+  const existing = state.catalog.find(item => item.id === product.id);
+  const price=Number(input.price), inventory=Number(input.inventory);
+  if (!Number.isFinite(price) || price <= product.cost || !Number.isInteger(inventory) || inventory < 0) throw new Error('商品售價必須高於成本，庫存必須為非負整數');
+  const currentListing=state.listings.find(item=>item.seller==='pilot'&&item.productId===product.id);
+  if (existing) Object.assign(existing, product);
+  if (existing && currentListing) return {created:false,product:existing,listing:currentListing};
+  if (!existing) state.catalog.push(product);
+  const listing={id:`pilot-${product.id}`,seller:'pilot',productId:product.id,price,inventory,initialInventory:inventory,rating:4.5,reviews:0,unitsSold:0,revenue:0,profit:0,restocked:0,adBudget:0,couponDiscount:0,promotionLevel:0,reviewItems:[]};
+  state.listings.push(listing);state.logs=[`MarketPilot 新增商品「${product.name}」並同步至商城`,...state.logs].slice(0,80);
+  return {created:!existing,product:existing||product,listing};
+}
+
 function applyPurchase(state, listing, buyer, review, logs) {
   if (!listing || listing.inventory < 1) return false;
-  const product = info[listing.productId];
+  const product = stateInfo(state)[listing.productId];
   listing.inventory--;
   listing.unitsSold++;
   const effectivePrice = listing.price * (1 - (listing.couponDiscount || 0));
@@ -65,10 +84,10 @@ function applyPurchase(state, listing, buyer, review, logs) {
 }
 
 export function step(oldState, buyerDecisions = null) {
-  const state = structuredClone(oldState); const random = seeded(state.seed + state.day * 7919); const before = new Map(state.listings.map(item => [item.id,{unitsSold:item.unitsSold,revenue:item.revenue,profit:item.profit}])); state.day++; const logs = [`Day ${state.day}`];
+  const state = structuredClone(oldState); const products=stateInfo(state); const random = seeded(state.seed + state.day * 7919); const before = new Map(state.listings.map(item => [item.id,{unitsSold:item.unitsSold,revenue:item.revenue,profit:item.profit}])); state.day++; const logs = [`Day ${state.day}`];
   if (random() <= .31) { const choices = [{name:'🔥 市場需求暴增',effect:1.3,duration:2},{name:'📉 市場需求下降',effect:.7,duration:2},{name:'🔥 服飾類突然熱門',effect:1.35,duration:3,category:'服飾'},{name:'🛍️ 購物節',effect:1.45,duration:1}]; const event = {...choices[Math.floor(random()*choices.length)],event_id:`E${state.day}`,start_day:state.day}; state.events.push(event); logs.push(`${event.name}｜需求 ${event.effect > 1 ? '+' : '-'}${Math.round(Math.abs(event.effect-1)*100)}%`); }
-  state.listings.filter(listing => listing.seller !== 'pilot').forEach(listing => { const peers=state.listings.filter(item => item.productId===listing.productId&&item.id!==listing.id); if(peers.length&&random()<.38){const average=peers.reduce((sum,item)=>sum+item.price,0)/peers.length;const target=Math.max(info[listing.productId].cost+1,Math.round(average*.98));if(target!==listing.price){listing.price=target;logs.push(`${sellers[listing.seller]} 調整「${info[listing.productId].name}」價格為 NT$${target}`)}} if(listing.inventory<20&&random()<.7){listing.inventory+=60;listing.restocked+=60;logs.push(`${sellers[listing.seller]} 補貨「${info[listing.productId].name}」60 件`)}});
-  for (const action of state.pendingActions) { const product = info[action.productId]; let listing = state.listings.find(x => x.seller === 'pilot' && x.productId === action.productId); if (action.type === 'list_product') { listing = {id:`pilot-${action.productId}`,seller:'pilot',productId:action.productId,price:Number(action.price),inventory:Number(action.initial_inventory),initialInventory:Number(action.initial_inventory),rating:4.5,reviews:0,unitsSold:0,revenue:0,profit:0,restocked:0,adBudget:0,couponDiscount:0,promotionLevel:0,reviewItems:[]}; state.listings.push(listing); } else if (action.type === 'update_price') listing.price = Number(action.price); else if (action.type === 'update_strategy') { listing.adBudget=Number(action.ad_budget); listing.couponDiscount=Number(action.coupon_discount); listing.promotionLevel=Number(action.promotion_level); } else if (action.type === 'restock') { listing.inventory += Number(action.quantity); listing.restocked += Number(action.quantity); } else state.listings = state.listings.filter(x => x !== listing); logs.push(`MarketPilot 執行：${action.type} ${product.name}`); }
+  state.listings.filter(listing => listing.seller !== 'pilot').forEach(listing => { const peers=state.listings.filter(item => item.productId===listing.productId&&item.id!==listing.id); if(peers.length&&random()<.38){const average=peers.reduce((sum,item)=>sum+item.price,0)/peers.length;const target=Math.max(products[listing.productId].cost+1,Math.round(average*.98));if(target!==listing.price){listing.price=target;logs.push(`${sellers[listing.seller]} 調整「${products[listing.productId].name}」價格為 NT$${target}`)}} if(listing.inventory<20&&random()<.7){listing.inventory+=60;listing.restocked+=60;logs.push(`${sellers[listing.seller]} 補貨「${products[listing.productId].name}」60 件`)}});
+  for (const action of state.pendingActions) { const product = products[action.productId]; let listing = state.listings.find(x => x.seller === 'pilot' && x.productId === action.productId); if (action.type === 'list_product') { listing = {id:`pilot-${action.productId}`,seller:'pilot',productId:action.productId,price:Number(action.price),inventory:Number(action.initial_inventory),initialInventory:Number(action.initial_inventory),rating:4.5,reviews:0,unitsSold:0,revenue:0,profit:0,restocked:0,adBudget:0,couponDiscount:0,promotionLevel:0,reviewItems:[]}; state.listings.push(listing); } else if (action.type === 'update_price') listing.price = Number(action.price); else if (action.type === 'update_strategy') { listing.adBudget=Number(action.ad_budget); listing.couponDiscount=Number(action.coupon_discount); listing.promotionLevel=Number(action.promotion_level); } else if (action.type === 'restock') { listing.inventory += Number(action.quantity); listing.restocked += Number(action.quantity); } else state.listings = state.listings.filter(x => x !== listing); logs.push(`MarketPilot 執行：${action.type} ${product.name}`); }
   state.pendingActions = [];
   if (Array.isArray(buyerDecisions)) {
     const buyerByName = new Map(buyers.map(buyer => [buyer.name, buyer]));
@@ -82,9 +101,9 @@ export function step(oldState, buyerDecisions = null) {
     }
     logs.push(`OpenAI 買家完成 ${processedBuyers.size} 個購買決策`);
   } else {
-    for (const listing of state.listings) { if (!listing.inventory) continue; const product = info[listing.productId]; const effectivePrice=listing.price*(1-(listing.couponDiscount||0)); const adFactor=1+Math.min(.5,(listing.adBudget||0)/5000*.5); const promotionFactor=1+(listing.promotionLevel||0)*.35; const base = 13 * Math.max(.15, 1.75-effectivePrice/(product.cost*1.55)) * (.65+product.quality*.55) * (.65+listing.rating/5*.55) * demandFactor(state,product) * adFactor * promotionFactor * (.65+random()*.7); const candidates = Array.from({length:Math.max(0,Math.round(base))}, () => purchaseScore(buyers[Math.floor(random()*buyers.length)], product, {...listing,price:effectivePrice}, random)).filter(score => score >= 1.28 + random()*.18); const sold = Math.min(listing.inventory, candidates.length); listing.inventory -= sold; listing.unitsSold += sold; listing.revenue += sold * effectivePrice; listing.profit += sold * (effectivePrice-product.cost); if (listing.seller === 'pilot' && sold) logs.push(`MarketPilot 售出 ${sold} 件「${product.name}」`); }
+    for (const listing of state.listings) { if (!listing.inventory) continue; const product = products[listing.productId]; const effectivePrice=listing.price*(1-(listing.couponDiscount||0)); const adFactor=1+Math.min(.5,(listing.adBudget||0)/5000*.5); const promotionFactor=1+(listing.promotionLevel||0)*.35; const base = 13 * Math.max(.15, 1.75-effectivePrice/(product.cost*1.55)) * (.65+product.quality*.55) * (.65+listing.rating/5*.55) * demandFactor(state,product) * adFactor * promotionFactor * (.65+random()*.7); const candidates = Array.from({length:Math.max(0,Math.round(base))}, () => purchaseScore(buyers[Math.floor(random()*buyers.length)], product, {...listing,price:effectivePrice}, random)).filter(score => score >= 1.28 + random()*.18); const sold = Math.min(listing.inventory, candidates.length); listing.inventory -= sold; listing.unitsSold += sold; listing.revenue += sold * effectivePrice; listing.profit += sold * (effectivePrice-product.cost); if (listing.seller === 'pilot' && sold) logs.push(`MarketPilot 售出 ${sold} 件「${product.name}」`); }
   }
-  state.listings.filter(listing => listing.seller === 'pilot').forEach(listing => { listing.profit -= listing.adBudget || 0; }); state.dailyResults = state.listings.map(listing => { const previous=before.get(listing.id)||{unitsSold:0,revenue:0,profit:0}; return {day:state.day,listingId:listing.id,productId:listing.productId,seller:listing.seller,price:listing.price,unitCost:info[listing.productId].cost,unitsSold:listing.unitsSold-previous.unitsSold,revenue:listing.revenue-previous.revenue,grossProfit:listing.profit-previous.profit,inventory:listing.inventory,adBudget:listing.adBudget||0,couponDiscount:listing.couponDiscount||0,promotionLevel:listing.promotionLevel||0,rating:listing.rating}; }); state.dailyHistory=[...(state.dailyHistory||[]),{day:state.day,results:state.dailyResults}].slice(-7); state.events = state.events.filter(e => state.day < e.start_day + e.duration); state.history.push({day:state.day,...metrics(state)}); state.logs = [...logs,...state.logs].slice(0,80); return state;
+  state.listings.filter(listing => listing.seller === 'pilot').forEach(listing => { listing.profit -= listing.adBudget || 0; }); state.dailyResults = state.listings.map(listing => { const previous=before.get(listing.id)||{unitsSold:0,revenue:0,profit:0}; return {day:state.day,listingId:listing.id,productId:listing.productId,seller:listing.seller,price:listing.price,unitCost:products[listing.productId].cost,unitsSold:listing.unitsSold-previous.unitsSold,revenue:listing.revenue-previous.revenue,grossProfit:listing.profit-previous.profit,inventory:listing.inventory,adBudget:listing.adBudget||0,couponDiscount:listing.couponDiscount||0,promotionLevel:listing.promotionLevel||0,rating:listing.rating}; }); state.dailyHistory=[...(state.dailyHistory||[]),{day:state.day,results:state.dailyResults}].slice(-7); state.events = state.events.filter(e => state.day < e.start_day + e.duration); state.history.push({day:state.day,...metrics(state)}); state.logs = [...logs,...state.logs].slice(0,80); return state;
 }
 
-export function publicState(state) { return { ...structuredClone(state), catalog, sellers, metrics:metrics(state) }; }
+export function publicState(state) { return { ...structuredClone(state), catalog:structuredClone(stateCatalog(state)), sellers, metrics:metrics(state) }; }

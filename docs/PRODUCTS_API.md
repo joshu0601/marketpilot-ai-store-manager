@@ -19,6 +19,7 @@
 3. 計算最低允許售價：`unit_cost / (1 - min_gross_margin)`。
 4. 若 GPT 售價低於底線，由毛利防護提高至最低允許售價。
 5. 保存商品、AI 定價資訊與實際預估毛利率。
+6. 將同一個 SKU、AI 售價與庫存同步至 MarketSimulator 消費者商城。
 
 成功回應包含：
 
@@ -41,9 +42,13 @@
       "projected_gross_margin": 0.438127,
       "margin_guardrail_applied": false,
       "model": "gpt-4o-mini"
+    },
+    "marketplace_sync": {
+      "synced": true,
+      "created": true
     }
   }
 }
 ```
 
-沒有設定 OpenAI API key 或 GPT 定價失敗時，商品不會建立。後續每日價格由 `/api/agent/decide` 的 `action.price` 控制，外部環境不應提供人工價格覆蓋功能。
+沒有設定 OpenAI API key 或 GPT 定價失敗時，商品不會建立。模擬器暫時離線時，商品仍會保存在後台，回應中的 `marketplace_sync.synced` 會是 `false`；下次開啟模擬後台或推進新一天時會自動補同步。後續每日價格由 `/api/agent/decide` 的 `action.price` 控制，外部環境不應提供人工價格覆蓋功能。

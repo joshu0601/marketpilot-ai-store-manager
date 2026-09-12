@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createState, queueActions, step } from '../src/engine.js';
+import { addProduct, createState, publicState, queueActions, step } from '../src/engine.js';
 
 test('seller action is validated then applied on the next day', () => {
   let state = createState(12345);
@@ -33,4 +33,18 @@ test('AI strategy changes demand inputs and creates daily SKU results', () => {
   assert.ok(daily);
   assert.equal(daily.day, 2);
   assert.ok(daily.grossProfit <= daily.revenue - daily.unitsSold * 500, 'advertising spend is deducted from profit');
+});
+
+test('an admin product is added to the dynamic catalog and storefront immediately', () => {
+  let state = createState(12345);
+  const result = addProduct(state, {
+    id:'AI-12AB34CD', name:'測試新品', category:'MarketPilot 商品', cost:100,
+    price:160, inventory:8, lowStockThreshold:2, minGrossMargin:.35,
+  });
+  assert.equal(result.created, true);
+  assert.equal(publicState(state).catalog.find(product => product.id === 'AI-12AB34CD').name, '測試新品');
+  assert.equal(publicState(state).catalog.find(product => product.id === 'AI-12AB34CD').minGrossMargin, .35);
+  assert.equal(state.listings.find(listing => listing.productId === 'AI-12AB34CD').inventory, 8);
+  state = step(state);
+  assert.ok(state.dailyResults.find(item => item.productId === 'AI-12AB34CD'));
 });
