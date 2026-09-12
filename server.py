@@ -34,6 +34,8 @@ DEFAULT_MODEL = "gpt-4o-mini"
 PRODUCTS_LOCK = threading.Lock()
 DAILY_ANALYSIS_LOCK = threading.Lock()
 SIMULATION_LOCK = threading.RLock()
+SIMULATION_PROGRESS_LOCK = threading.Lock()
+SIMULATION_PROGRESS = {"status": "idle", "stage": "idle", "day": None, "product_name": None, "product_index": 0, "product_count": 0, "error": None}
 TAIPEI_TIMEZONE = ZoneInfo("Asia/Taipei")
 
 
@@ -615,14 +617,18 @@ def decide_action(request: AgentDecisionRequest, require_ai: bool = False) -> di
     }
 
 
-def decide_all_products(request: BatchDecisionRequest) -> dict:
+def decide_all_products(request: BatchDecisionRequest, on_progress=None) -> dict:
     skus = [observation.sku for observation in request.observations]
     if len(skus) != len(set(skus)):
         raise ValueError("批次 Observation 中的 sku 不可重複")
     mismatched = [item.sku for item in request.observations if item.observation_date != request.observation_date]
     if mismatched:
         raise ValueError(f"所有商品 observation_date 必須等於批次日期：{', '.join(mismatched)}")
-    decisions = [decide_action(observation, require_ai=True) for observation in request.observations]
+    decisions = []
+    for index, observation in enumerate(request.observations, 1):
+        if on_progress:
+            on_progress(observation.sku, index, len(request.observations))
+        decisions.append(decide_action(observation, require_ai=True))
     return {
         "batch_id": request.batch_id or str(uuid.uuid4()),
         "observation_date": request.observation_date,
@@ -1007,6 +1013,18 @@ def simulator_batch(state: dict) -> BatchDecisionRequest:
     return BatchDecisionRequest(batch_id=f"market-simulator-day-{state.get('day')}", observation_date=observation_date, observations=observations)
 
 
+def set_simulation_progress(stage: str, **details) -> None:
+    global SIMULATION_PROGRESS
+    with SIMULATION_PROGRESS_LOCK:
+        SIMULATION_PROGRESS = {**SIMULATION_PROGRESS, "stage": stage, "updated_at": datetime.now(TAIPEI_TIMEZONE).isoformat(), **details}
+
+
+def simulation_progress() -> dict:
+    # Independent of the day lock: this must stay readable while GPT is running.
+    with SIMULATION_PROGRESS_LOCK:
+        return dict(SIMULATION_PROGRESS)
+
+
 def run_simulator_day(expected_day: int | None = None) -> dict:
     if not SIMULATION_LOCK.acquire(blocking=False):
         raise ValueError("市場正在執行操作，請等待完成")
@@ -1014,9 +1032,14 @@ def run_simulator_day(expected_day: int | None = None) -> dict:
         state = sync_products_to_simulator()
         if expected_day is not None and expected_day != state.get("day"):
             raise ValueError("模擬日期已變更，請重新整理後再試")
+        set_simulation_progress("competitor", status="running", day=state["day"] + 1, product_name=None, product_index=0, product_count=0, error=None)
         prepared = simulator_request("/api/prepare-day", "POST", {"expected_day": state["day"]})
         market = prepared["state"]
-        decisions = decide_all_products(simulator_batch(market))["decisions"]
+        catalog = simulator_catalog_map(market)
+        set_simulation_progress("manager")
+        def manager_progress(sku, index, count):
+            set_simulation_progress("manager", product_name=catalog.get(sku, {}).get("name", sku), product_index=index, product_count=count)
+        decisions = decide_all_products(simulator_batch(market), on_progress=manager_progress)["decisions"]
         actions, notifications = [], []
         catalog = simulator_catalog_map(market)
         for decision in decisions:
@@ -1029,10 +1052,17 @@ def run_simulator_day(expected_day: int | None = None) -> dict:
             if action["reorder_quantity"] > 0:
                 notifications.append({"type": "low_stock", "product_id": product_id, "name": catalog[product_id]["name"], "quantity": action["reorder_quantity"], "reason": decision["decision"]["reasons"]["inventory"], "status": "waiting_for_seller"})
         run = {"phase": "daily_ai" if state.get("dailyResults") else "cold_start", "observation_day": state["day"], "decisions": decisions, "seller_notifications": notifications}
+        set_simulation_progress("buyer", product_name=None)
         next_state = simulator_request("/api/step", "POST", {"expected_day": state["day"], "token": prepared["token"], "actions": actions, "agent_run": run})
         run = next_state["lastAgentRun"]
         save_simulator_run(run)
+        set_simulation_progress("completed", status="completed")
         return {"state": next_state, "agent_run": run}
+    except Exception:
+        progress = simulation_progress()
+        if progress["status"] == "running":
+            set_simulation_progress(progress["stage"], status="failed", error="本階段執行失敗，請查看錯誤訊息後重試。")
+        raise
     finally:
         SIMULATION_LOCK.release()
 
@@ -1043,6 +1073,7 @@ def reset_simulator(seed: int = 12345) -> dict:
     try:
         state = simulator_request("/api/reset", "POST", {"seed": seed})
         save_simulator_run({})
+        set_simulation_progress("idle", status="idle", day=None, product_name=None, product_index=0, product_count=0, error=None)
         return sync_products_to_simulator(state)
     finally:
         SIMULATION_LOCK.release()
@@ -1125,6 +1156,9 @@ class MarketPilotHandler(SimpleHTTPRequestHandler):
             return
         if path == "/api/products":
             self._json({"products": current_products()})
+            return
+        if path == "/api/simulator/progress":
+            self._json({"ok": True, **simulation_progress()})
             return
         if path == "/api/simulator/dashboard":
             self._json({"ok": True, **simulator_dashboard()})
